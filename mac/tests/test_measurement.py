@@ -4,7 +4,24 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from measurement import cristian_offset_ms, median, stddev_sample, ci95_ms
+from measurement import (
+    cristian_offset_ms,
+    median,
+    stddev_sample,
+    ci95_ms,
+    select_edge_offsets,
+    reduce_samples,
+)
+
+
+def _sample(rtt_ms, server_date_ms, pc_at_t2_ms):
+    raw_offset = (server_date_ms + rtt_ms / 2.0) - pc_at_t2_ms
+    return {
+        "rtt_ms": rtt_ms,
+        "server_date_ms": server_date_ms,
+        "pc_at_t2_ms": pc_at_t2_ms,
+        "raw_offset_ms": raw_offset,
+    }
 
 
 class CristianOffsetTest(unittest.TestCase):
@@ -43,6 +60,41 @@ class StatsHelperTest(unittest.TestCase):
     def test_ci95_ms_uses_t_table(self):
         vals = [1.0] * 10
         self.assertAlmostEqual(ci95_ms(vals), 0.0, places=6)
+
+
+class EdgeDetectionTest(unittest.TestCase):
+    def test_edge_detected_when_date_increments(self):
+        samples = [
+            _sample(rtt_ms=50, server_date_ms=1_000_000_000, pc_at_t2_ms=999_999_980),
+            _sample(rtt_ms=50, server_date_ms=1_000_001_000, pc_at_t2_ms=1_000_000_500),
+        ]
+        edges = select_edge_offsets(samples)
+        self.assertEqual(len(edges), 1)
+
+    def test_no_edge_when_date_repeats(self):
+        samples = [
+            _sample(rtt_ms=50, server_date_ms=1_000_000_000, pc_at_t2_ms=999_999_980),
+            _sample(rtt_ms=50, server_date_ms=1_000_000_000, pc_at_t2_ms=999_999_990),
+        ]
+        self.assertEqual(select_edge_offsets(samples), [])
+
+    def test_reduce_uses_edge_method_when_edges_present(self):
+        samples = [
+            _sample(rtt_ms=50, server_date_ms=1_000_000_000, pc_at_t2_ms=999_999_980),
+            _sample(rtt_ms=50, server_date_ms=1_000_001_000, pc_at_t2_ms=1_000_000_500),
+            _sample(rtt_ms=50, server_date_ms=1_000_002_000, pc_at_t2_ms=1_000_001_500),
+        ]
+        result = reduce_samples(samples)
+        self.assertEqual(result["method"], "edge")
+        self.assertGreaterEqual(result["accepted_count"], 1)
+
+    def test_reduce_falls_back_when_no_edges(self):
+        samples = [
+            _sample(rtt_ms=50 + i, server_date_ms=1_000_000_000, pc_at_t2_ms=999_999_980 + i)
+            for i in range(10)
+        ]
+        result = reduce_samples(samples)
+        self.assertEqual(result["method"], "upper-envelope")
 
 
 if __name__ == "__main__":
