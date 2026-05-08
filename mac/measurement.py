@@ -222,6 +222,59 @@ def head_probe(url: str, anchor: MonotonicAnchor):
             pass
 
 
+def _reduce_precise(samples):
+    low, rtt_med = select_low_jitter(samples, min_count=3)
+    offsets = [(s["server_date_ms"] + s["rtt_ms"] / 2.0) - s["pc_at_t2_ms"] for s in low]
+    return {
+        "offset_ms": median(offsets),
+        "sigma_ms": stddev_sample(offsets),
+        "ci95_ms": ci95_ms(offsets),
+        "rtt_median_ms": rtt_med,
+        "sample_count": len(samples),
+        "accepted_count": len(offsets),
+        "method": "naver-time-api",
+    }
+
+
+def adaptive_multi_sample(url: str, anchor: "MonotonicAnchor",
+                          interval_ms=50, target_window_ms=6000,
+                          min_count=10, max_count=60, rtt_probe_count=3):
+    """Mirror Invoke-AdaptiveMultiSample. Returns dict from reduce_samples()."""
+    use_naver = is_naver_clock_url(url)
+    samples = []
+    for _ in range(rtt_probe_count):
+        try:
+            s = naver_probe(anchor) if use_naver else head_probe(url, anchor)
+            samples.append(s)
+        except Exception:
+            pass
+        time.sleep(interval_ms / 1000.0)
+
+    if not samples:
+        raise RuntimeError("All initial RTT probes failed")
+
+    rtt_med = median([s["rtt_ms"] for s in samples])
+    count = adaptive_count(rtt_med, interval_ms=interval_ms,
+                           target_window_ms=target_window_ms,
+                           min_count=min_count, max_count=max_count)
+
+    while len(samples) < count:
+        try:
+            s = naver_probe(anchor) if use_naver else head_probe(url, anchor)
+            samples.append(s)
+        except Exception:
+            pass
+        if len(samples) < count:
+            time.sleep(interval_ms / 1000.0)
+
+    if len(samples) < int(count * 0.5):
+        raise RuntimeError(f"Too many failed samples: {len(samples)}/{count}")
+
+    if use_naver:
+        return _reduce_precise(samples)
+    return reduce_samples(samples)
+
+
 def naver_probe(anchor: MonotonicAnchor):
     parsed = urlparse(NAVER_API_URL)
     conn = http.client.HTTPSConnection(parsed.hostname, 443, timeout=HTTP_TIMEOUT_SEC)
