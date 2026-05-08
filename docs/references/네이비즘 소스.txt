@@ -1,0 +1,679 @@
+
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>네이버 서버시간 - 네이비즘</title>
+<meta name="description" content="네이버(naver.com) 사이트 서버의 정확한 네이비즘 예약, 신청, 접수, 선착순, 모집 서버시간 확인" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="네이버 서버시간 - 네이비즘" />
+<meta property="og:url" content="https://time.navyism.com/?host=naver.com" />
+<meta property="og:description" content="네이버(naver.com) 사이트 서버의 정확한 네이비즘 예약, 신청, 접수, 선착순, 모집 서버시간 확인" />
+<meta property="og:image" content="https://data.navyism.com/og.jpg" />
+<meta property="fb:app_id" content="229339130480164" />
+<meta property="fb:admins" content="1198798522" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="index,follow" />
+<meta name="verify-v1" content="nuIg8QGoDVEVSnRMWQItR7bcCf9De5x0OvxJvHxgpjg=" />
+<meta name="msvalidate.01" content="F0FFB511BB609D783E0E92382BE99DDA" />
+<meta name="google-translate-customization" content="f3d3b6aff9d0040d-5c48419936d9e7d1-g53efe460fb364d0f-10" />
+<meta name="apple-mobile-web-app-title" content="네이비즘" />
+<meta name="application-name" content="네이비즘" />
+<meta name="msapplication-config" content="https://data.navyism.com/favicon/browserconfig.xml" />
+<meta name="theme-color" content="#ffffff" />
+<link rel="canonical" href="https://time.navyism.com/?host=naver.com" />
+<link rel="apple-touch-icon" sizes="180x180" href="https://data.navyism.com/favicon/apple-touch-icon.png" />
+<link rel="icon" type="image/png" href="https://data.navyism.com/favicon/favicon-32x32.png" sizes="32x32" />
+<link rel="icon" type="image/png" href="https://data.navyism.com/favicon/favicon-16x16.png" sizes="16x16" />
+<link rel="manifest" href="https://data.navyism.com/favicon/manifest.json" />
+<link rel="mask-icon" href="https://data.navyism.com/favicon/safari-pinned-tab.svg" color="#da532c" />
+<link rel="shortcut icon" href="https://data.navyism.com/favicon.ico" />
+<link rel="stylesheet" type="text/css" href="/time.css?20251030-1"/>
+<link rel="alternate" hreflang="ko" href="https://time.navyism.com/?host=naver.com">
+<link rel="alternate" hreflang="en" href="https://time.navyism.com/en/?host=naver.com">
+<link rel="alternate" hreflang="x-default" href="https://time.navyism.com/?host=naver.com">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "네이비즘",
+  "url": "https://time.navyism.com",
+  "logo": "https://data.navyism.com/navyismLogo400.png",
+  "sameAs": [
+    "https://www.instagram.com/time.navyism",
+    "https://www.instagram.com/navyism.podoal/",
+    "https://twitter.com/timenavyism",
+    "https://story.kakao.com/ch/navyism",
+    "https://blog.naver.com/navyism",
+    "https://www.facebook.com/servertime"
+  ]
+}
+</script>
+<script>
+var time_sep=" ";
+var uhost1="naver.com";
+var uhost2="naver.com";
+var host="naver.com";
+var isMobile=false;
+var lang="ko";
+var fhost="";
+
+
+</script>
+<style type="text/css">
+header {
+	background:#ffea8d;
+	border-radius:8px;
+}
+
+
+.communityArticle
+{
+	margin-top:8px;
+	list-style:none; height:15px;
+	overflow-y:hidden;
+			letter-spacing:-1px;
+		display:block;
+}
+    
+.communityArticle a
+{
+    text-decoration:none;
+}
+.buttonFight
+{
+	border-width	: 1px;
+	border-style	: solid;
+	border-color	: #FF754B;
+	color			: #ffffff;
+	background		: #FF754B;
+	height			: 50px;
+	font-weight		: bold;
+	padding			: 5px 1px 4px 1px;
+	width			: 90px;
+	font-size		: 15pt;
+	-webkit-border-radius   : 8px;
+	cursor			: pointer;
+	-webkit-appearance		: none;
+}
+
+#time_area
+{
+			letter-spacing:-6px;
+    	font-size:40pt;
+	    color:#0299F8;
+    font-weight:bold;
+    text-shadow             : rgb(80, 80, 80) -0.5px -0.5px 0.5px;
+    float:left;
+}
+
+#msec_area
+{
+    float:left;
+    letter-spacing:-3px;
+    font-size:27pt;
+    color:#0299F8;
+    font-weight:bold;
+    text-shadow             : rgb(80, 80, 80) -0.5px -0.5px 0.5px;
+	    	padding-top	: 2px;
+	    padding-left : 10px;
+}
+
+	#time_area
+	{
+			letter-spacing:-8px;
+		}
+#summary li
+{
+	overflow:unset;
+}
+
+.noRnHost
+{
+}
+
+
+</style>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-1ZJZJCP2Z4"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-1ZJZJCP2Z4');
+</script>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7080544515747498" crossorigin="anonymous"></script>
+</head>
+<body onload="initOk();">
+<div style="margin:0 auto;width:1090px; position:relative">
+<div id="navyismMainContainer" style="width:728px; height:94px">
+
+
+
+
+
+
+
+<style>
+.headNav {
+	background:#ffea8d;
+	padding:15px;
+	border-radius:8px;
+}
+
+.headNav form {
+	display:inline;
+}
+
+.headNavMenu {
+	letter-spacing:-1px; 
+	padding-bottom:15px;
+}
+
+.headNavForm {
+	display:flex;
+	max-width:728px;
+}
+
+.headNavForm div:nth-child(1) {
+	padding-right:10px
+}
+
+.headNavForm div:nth-child(2) {
+	flex: 1 1 auto; 
+	display:flex;
+}
+
+.headNavForm div:nth-child(3) {
+	padding-left:5px;
+	padding-right:5px
+}
+
+#inputhere {
+	flex:auto;
+	background-color:rgba(255,255,255,0); 
+	height:37px; 
+	border-radius:8px; 
+	z-index:2;
+}
+
+#inputhereSuggest {
+	position:absolute; 
+	height:37px; 
+	color:#d0d0d0; 
+	border-radius:8px;
+}
+
+#buttonFight {
+	height:55px;
+}
+
+
+.main_menu a
+{
+	color	: #000;
+}
+
+</style>
+<script>
+var headSubmit = false;
+
+function headSubmitCheck(obj)
+{
+	if(headSubmit)
+	{
+		return false;
+	}
+	else
+	{
+		headSubmit	= true;
+		return true;
+	}
+}
+</script>
+<header>
+<form action="" onsubmit="return headSubmitCheck(this)">
+<div class="headNav">
+	<div class="headNavMenu">
+		
+	<nav aria-label="메인 메뉴">
+	<ul class="main_menu_container" style="margin:0px; padding:0px; display:flex; list-style: none">
+	<li style="margin-right:8px; "><a href="/" id="main.mnu.servertime" style="padding-right:1px; color:#000" aria-current="page">표준시간</a></li>
+	<li class="main_menu" style="margin-right:8px"><a href="/bbs.php" id="main.mnu.community" style="padding-right:1px">네이비즘 댓글</a></li>
+	<li class="main_menu" style="margin-right:8px"><a href="/countdownList.php" id="main.mnu.scat" style="padding-right:1px">카운트다운</a></li>
+	<li class="main_menu" style="margin-right:8px"><a href="/podoal" id="main.mnu.podoal" style="padding-right:1px">포도알 만들기</a></li>
+	<li class="main_menu" style="margin-right:8px"><a href="/game" id="main.mnu.game" style="padding-right:1px">티켓팅 연습게임</a></li>
+	<li class="main_menu" style="margin-right:8px"><a href="/birthday.php" id="main.mnu.birthday" style="padding-right:1px">생일축하시간</a></li>
+	<li class="main_menu" style="margin-right:8px"><a href="/surveyList.php" id="main.mnu.survey" style="padding-right:1px">설문조사</a></li>
+	<li class="main_menu" style="margin-right:8px"><a href="/report.php" id="main.mnu.report" style="padding-right:1px">네이비즘트렌드</a></li>
+	<li class="main_menu" style="margin-right:8px"><a href="/awards.php" id="main.mnu.awards" style="padding-right:1px">네이비즘어워즈</a></li>
+	</ul>
+	</nav>
+		</div>
+	<div class="headNavForm">
+		<div>
+							<a href="/" title="네이비즘 서버시간 표준시간"><img src="https://data.navyism.com/title_logo.png" border="0" align="absmiddle" style="width:55px" alt="네이비즘 로고"></a>
+					</div>
+		<div>
+			<input type="text" name="host" value="naver.com" size="29" class="input" inputmode="url" id='inputhere' onkeyup="hostSuggest()">
+			<input type="text" value="" size="29" class="input" id='inputhereSuggest'readonly onfocus="document.getElementById('inputthere').focus()">
+		</div>
+		<div>
+			<input type="submit" value="Fight!" class="button" id="buttonFight">
+		</div>
+	</div>
+</div>
+</form>
+</header>
+<script>
+function inputhereResize()
+{
+	document.getElementById("inputhereSuggest").style.width = (document.getElementById("inputhere").offsetWidth - 18) + "px";
+}
+
+inputhereResize();
+
+document.body.onresize = function(){
+	inputhereResize();
+}
+</script>
+
+
+
+<div style="width:728px;">
+			
+			<div style="width:728px; height:90px; padding-top:15px; padding-bottom:5px" id="ga11777715527">
+														<ins class="adsbygoogle"
+						style="display:inline-block;width:728px;height:90px"
+						data-ad-client="ca-pub-7080544515747498"
+						data-ad-slot="7271672926"></ins>
+																</div>
+			</div>
+			<br />
+		<span class="nodrag">
+		&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+		<font color=gray title="초딩짓하면 부끄러운거다... 알고 있지?">↙사이트 제목이 마음에 안 들면 <span onclick='openChangeForm(); openTitleHistorySummary()' style='color:gray; text-decoration:underline; cursor:pointer'><b>다시 입력하시죠~</b></span></font>
+					&nbsp;
+				<font color=gray title="너만 특별히 보여준다">바뀌기 전에는 <span onclick='openTitleHistory(); layoutArrage()' style='color:gray; text-decoration:underline; cursor:pointer'><b>어떤 제목이었을까?</b></span></font>
+				</span>
+	
+		<span id='changeTitle' style='display:none'>
+		<div style="padding-top:5px">
+		<form name=ctitle method=post action=ing.php?changeTitlePc target=actionFrame onsubmit="return chkChangeTitle(this)" style="display:inline">
+			<input type='hidden' name='mode' value='changeTitleFrame'>
+			<input type='hidden' name='host' value="naver.com">
+			<input type=text class=input id="newTitle" name=title style="width:450px; border-radius:4px" maxlength=30 value="">
+			<input type=submit class=button value="제목변경" style="width:120px">
+		</form>
+	</div>
+	</span>
+	<br />
+
+	<div id="pageInfo">
+				<span id="siteName">
+						<strong>모두행복해졌으면좋겟다</strong>
+					</span>
+
+									<span><strong>(<a href="#" onclick="window.open('https://naver.com')" title="서버시간을 확인중인 네이버 사이트로 이동합니다">naver.com</a>)</strong>의 서버시간은 . . .</span>
+						</div>
+
+
+<div id="time_area" role="timer" aria-live="polite" aria-label="서버시간" onclick="dayNameControl()"></div>
+<div id="msec_area" aria-live="polite" aria-label="밀리초"></div>
+<div id="time_error_area" aria-live="polite" style="clear:both; width:720px"></div>
+<div id="title_history" class="nodrag" style="display:none; width:728px; font-size:15pt; letter-spacing:-1px; line-height:29px; padding-top:10px; padding-bottom:15px"></div>
+
+
+	<div class="main_title" id="main_title"><h1>네이버 서버시간</h1></div>
+<div style="padding-bottom:5px;padding-top:15px;width:728px;letter-spacing:-1px;position:relative" class="nodrag">
+		<fieldset style="margin: 0;padding: 0;border: unset;"><legend style="display:none">설정</legend>
+		<div id="alramOn" style="position:absolute;border-radius: 4px;background: #585858;width: 242px;height: 18px;z-index: 10000;color: #fff;text-align: center;padding-top: 2px;display:none; cursor:pointer;letter-spacing:0px" onclick="alramOn();this.style.display='none'">정각 알람을 듣고 싶으면 클릭해 주세요</div>
+		<div style="display:inline">
+			<input type=checkbox id='playAlram' onclick="this.checked ? setCookie('alram', '1', 7) : setCookie('alram', '0', 7)" checked> <label for='playAlram' style="margin-right:3px">알람듣기</label>
+			<input type=checkbox id='playAlramBefore' onclick="this.checked ? setCookie('alram1', '1', 7) : setCookie('alram1', '0', 7)" > <label for='playAlramBefore' style="margin-right:3px">1분전</label>
+			<input type=checkbox id='playAlramBefore2' onclick="this.checked ? setCookie('alram2', '1', 7) : setCookie('alram2', '0', 7)" > <label for='playAlramBefore2' style="margin-right:3px">2분전</label>
+			<input type=checkbox id='playAlramBefore3' onclick="this.checked ? setCookie('alram3', '1', 7) : setCookie('alram3', '0', 7)" > <label for='playAlramBefore3' style="margin-right:3px">3분전</label>
+		</div>
+		<div style="display:inline">
+			<input type="checkbox" id="no30_check" onclick="this.checked ? setCookie('no30', '1', 7) : setCookie('no30', '0', 7)" > <label for="no30_check" style="margin-right:5px">정각에만</label>
+			<input type="checkbox" id="nowarn_check" onclick="this.checked ? setCookie('nowarn', '1', 7) : setCookie('nowarn', '0', 7)" > <label for="nowarn_check" style="margin-right:5px">빨간색 싫어</label>
+			<input type="checkbox" id="onlyTime" onclick="this.checked ? setCookie('onlyTime', '1', 7) : setCookie('onlyTime', '0', 7)" > <label for="onlyTime" style="margin-right:5px">날짜 제거</label>
+			<input type="checkbox" id="msec_check" onclick="msec_control()"> <label for="msec_check" style="margin-right:3px" id="msec_title">밀리초 보기</label>
+					</div>
+	</fieldset>
+		</div>
+
+<script>
+document.getElementById("alramOn").style.width=(document.getElementById("nowarn_check").offsetLeft - 8) + 'px';
+		var uharoom	= "time.navyism.com.200b0e6895e993c29dd09dc74bce1772";
+	</script>
+
+<script src="/time.js?20251014-3" charset="utf-8"></script>
+
+<script>
+var mgap = 528;
+
+
+var thisTime2	= 1777715528;
+
+var mgval = new Date().getTime() - (thisTime2 * 1000 + mgap);
+
+
+function startShow()
+{
+	show(1777715528 - time() + 0);
+}
+
+startShow();
+
+mgval = mgval + 900;
+</script>
+
+<div id="chatLayer" style="display:none; width:728px; height:450px">
+	<div style="padding-top:10px; padding-bottom:10px; height:450px" id="chatContents">
+		<iframe style="width:728px; height:480px" scrolling="no" frameborder="0" id="cifs"></iframe>
+	</div>
+</div>
+
+	<div style="width:728px; padding-bottom:7px; padding-top:5px">
+    		<div style="padding-top:5px" id="ga21777715527">
+
+		
+										<ins class="adsbygoogle"
+				style="display:inline-block;width:728px;height:90px"
+				data-ad-client="ca-pub-7080544515747498"
+				data-ad-slot="5041600138"></ins>
+			
+						
+				</div>
+    	</div>
+
+							<div title="naver.com 서버시간 이용자수 그래프"><div id="chartdiv3"></div><div id="chartdiv"></div></div>
+					<div id='dash' style="padding-top:10px"></div>
+			<br />
+		<br />
+
+			<div style="clear:both; width:730px;position:relative; padding-top:1px"><div style="float:left; font-size:11pt" class="txt1">오늘의 광탈 순위를 알려드림~</div><div style="text-align:right; padding-right:3px; font-size:14px" class="more"><a href="/report.php">네이비즘 트렌드</a></div></div><br /><br />
+	<table width=728 border=0 cellpadding=12 cellspacing=1 bgcolor=#d0d0d0 class="rounded">
+<tr bgcolor=#f4f4f4 align=center>
+	<td width=33% class="txt1">전체 순위 (매일 매일 달라요)</td>
+	<td width=33% class="txt1">대학교 순위 (잘난 순위 아님)</td>
+</tr>
+<tr valign=top>
+<td bgcolor=#ffffff style='line-height:22px; letter-spacing:-1px; word-break:break-all'>
+    <div id="allArea" class="txt2">
+		<ul style="list-style:none; padding:0; margin:0"><h3 class="blind">서버시간확인 전체인기순위</h3>
+<li style='display:block; padding-bottom:7px'><a href='./?host=www.ticketlink.co.kr' style='font-size:12pt; font-weight:bold' class='hostRank'>티켓링크<br>(www.ticketlink.co.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=naver.com' style='' class='hostRank'>네이버 (naver.com)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=ticket.interpark.com' style='' class='hostRank'>NOL 인터파크 티켓팅 (ticket.interpark.com)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=www.mimacstudy.com' style='' class='hostRank'>대성마이맥 (www.mimacstudy.com)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=www.naver.com' style='' class='hostRank'>네이버 (www.naver.com)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=docs.google.com' style='' class='hostRank'>구글 폼림픽 (docs.google.com)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=play33.kr' style='' class='hostRank'>플레이33 (play33.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=dtis.mil.kr' style='' class='hostRank'>국방수송정보체계 (dtis.mil.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=fifaonline4.nexon.com' style='' class='hostRank'>피파온라인4 (fifaonline4.nexon.com)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=www.hddfs.com' style='' class='hostRank'>현대백화점인터넷면세점 (www.hddfs.com)</a></li>
+</ul>	</div>
+</td>
+<td bgcolor=#ffffff style='line-height:22px; letter-spacing:-1px; word-break:break-all'>
+    <div id="acArea" class="txt2">
+		<ul style="list-style:none; padding:0; margin:0"><h3 class="blind">서버시간확인 대학교 인기순위</h3>
+<li style='display:block; padding-bottom:7px'><a href='./?host=campus.cau.ac.kr' style='font-size:12pt; font-weight:bold;' class='hostRank'>중앙대학교 수강신청<br>(campus.cau.ac.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=portal.woosuk.ac.kr' style='' class='hostRank'>우석대학교 수강신청 (portal.woosuk.ac.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=door.deu.ac.kr' style='' class='hostRank'>동의대학교 DOOR (door.deu.ac.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=webhard.hanbat.ac.kr' style='' class='hostRank'>한밭대학교 웹디스크시스템 (webhard.hanbat.ac.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=gjue.koedu.ac.kr' style='' class='hostRank'>공주교육대학교 수강신청 (gjue.koedu.ac.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=www.yjp.ac.kr' style='' class='hostRank'>영진전문대학 (www.yjp.ac.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=was.kwu.ac.kr' style='' class='hostRank'>광주여자대학교 수강신청 (was.kwu.ac.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=cyber.mokwon.ac.kr' style='' class='hostRank'>목원대학교 사이버캠퍼스 (cyber.mokwon.ac.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=www.masan.ac.kr' style='' class='hostRank'>마산대학교 (www.masan.ac.kr)</a></li>
+<li style='display:block; padding-bottom:2px'><a href='./?host=hufs.ac.kr' style='' class='hostRank'>한국외국어대학교 수강신청 (hufs.ac.kr)</a></li>
+</ul>	</div>
+</td>
+</tr>
+</table>
+<br />
+
+			<footer>
+			<div style="padding-left:0px; padding-top:10px; padding-bottom:12px">
+			<ul class="menus" style="list-style:none; padding:0px; margin:0">
+			<li style="display:inline; margin: 5px 8px 5px 0px;"><a href="/" id="mnu.main">네이비즘 홈으로</a></li>
+			<li style="display:inline; margin: 5px 8px 5px 0px;"><a href="/notice.php?no=3" id="mnu.introduce">사이트 안내</a></li>
+			<li style="display:inline; margin: 5px 8px 5px 0px;"><a href="/notice.php?no=5" id="mnu.policy"><strong>개인정보 처리방침</strong></a></li>
+			<li style="display:inline; margin: 5px 8px 5px 0px;"><a href="https://www.instagram.com/time.navyism/" target="_blank" id="mnu.contact">문의하기</a></li>
+			<li style="display:inline; margin: 5px 8px 5px 0px;"><a href="/en/?host=naver.com" id="mnu.english" hreflang="en">English</a></li>
+			</ul>
+			</div>
+			<div style="padding-left:0px; padding-bottom:12px">
+			<ul class="menus" style="list-style:none; padding:0; margin:0">
+			<li style="display:inline; margin: 5px 5px 5px 0px;"><strong>&copy; 2026 navyism.com.</strong> All rights reserved. Since 2008.</li>
+			</ul>
+			</div>
+			
+				<div style="padding-left:0px; padding-bottom:12px;">
+				<ul class="menus" style="padding:0px;margin:0px">
+				<li style="display:inline; margin: 5px 5px 5px 0px;">서버시간은 이용 환경이나 네트워크 상황에 따라 오차가 발생할 수 있습니다.</li>
+				</ul>
+				</div>
+			<div style="padding-left:0px; padding-bottom:28px" id="snsArea">
+			<ul class="menus" style="list-style:none; padding:0; margin:0">
+			<li style="display:inline; margin: 5px 8px 5px 0px;"><a href="https://www.instagram.com/time.navyism/" target=_blank>공식 인스타그램</a></li>
+			<li style="display:inline; margin: 5px 8px 5px 0px;"><a href="https://www.instagram.com/navyism.podoal/" target=_blank>포도알 인스타그램</a></li>
+			<li style="display:inline; margin: 5px 8px 5px 0px;"><a href="https://www.facebook.com/servertime" target=_blank>페이스북 페이지</a></li>
+			<li style="display:inline; margin: 5px 8px 5px 0px;"><a href="https://twitter.com/timenavyism" target=_blank>트위터</a></li>
+			
+			</ul>
+			</div>
+			</footer>
+			<br />
+</div>
+<br /><br />
+	<div style="width:336px; left:755px; top:0px; position:absolute">
+
+
+    <div id="ga31777715527">
+    
+	
+				
+															<ins class="adsbygoogle"
+							style="display:block"
+							data-ad-client="ca-pub-7080544515747498"
+							data-ad-slot="3036059336"
+							data-ad-format="auto"
+							data-full-width-responsive="true"></ins>
+																
+        
+</div>
+    <article id="summary" title="naver.com 서버시간에 대한 요약"><ul style="padding:15px 0px 0px 0px;margin:0px"><li style="list-style:disc">현재 서버시간을 확인하는 <b>사용자가 많은 사이트</b>중 하나입니다<li style="list-style:disc">지난 1년간 <b>184만명</b> 이상이 서버시간을 확인한 사이트입니다<li style="list-style:disc">하루에 <b>2만명</b> 이상이 서버시간을 확인한 날도 있었습니다<li style="list-style:disc">최근에 서버시간 확인 <b>사용자가 급증</b>하고 있는 사이트입니다</ul></article>
+<div id="commentHighlight" onclick="window.open('bbs.php')" style="cursor:pointer; display:none; padding-top:7px; padding-bottom:7px; padding-left:8px; padding-right:8px; font-size:14pt; background:#000; color:#fff; letter-spacing:-1px" title="많은 사람들이 좋아했다면 여기에 뜰거다..."></div>
+
+		<div style="padding-top:14px; padding-bottom:5px">
+			<input id="navyismSearchButton" type="button" onclick="document.location.href='/notice.php?no=7'" style="width:336px; padding-top:12px; padding-bottom:12px; border:solid 15px #bbb; font-size:18pt; font-weight:600; cursor:pointer; -webkit-appearance:none; background:#fff; letter-spacing:0px; color:#000; border-radius:8px" value="구글에서 네이비즘" title="구글에서 네이비즘의 새로운 소색을 검색해보세요">
+			
+		</div>
+		<div style="padding-top:10px">
+	<input id="combutton" type="button" class="button2" style="letter-spacing:-2px; width:336px; color:#fff; background:#000; border-color:#000;height:50px; font-size:14pt; font-weight:bold; border-radius:8px" value="성공을 기원해보자!" title="성공을 기원해보자!" onclick="location.href='/bbs.php?f=i&tag='">
+</div>
+
+<div id="commentArea" style="letter-spacing:-1px; padding-top:5px; padding-bottom:5px"><div style="padding-top:5px; padding-bottom:15px"><ul style="padding:0px;margin:0px"><li class="txt1 communityArticle"><a href="bbsView.php?no=2690880"><span style="color:#000" id="com_2690880_0_0" class="comElement" >스위치 <font color="#cc0000">성공</font> 떙큐 베리망치</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690819"><span style="color:#000" id="com_2690819_0_0" class="comElement" >트레저 팬콘 제발 ㄱㅏ자</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690718"><span style="color:#000" id="com_2690718_0_0" class="comElement" >지후나사랑한다</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690655"><span style="color:#000" id="com_2690655_0_0" class="comElement" >출근없는 삶 놀먹하며 돈벌고 싶다</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690630"><span style="color:#000" id="com_2690630_0_0" class="comElement" >하는 일마다 잘 되게 해주세요</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690594"><span style="color:#000" id="com_2690594_0_0" class="comElement" >취업하게해주세요</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690583"><span style="color:#000" id="com_2690583_0_0" class="comElement" >채원이 혼자 시험개잘봄</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690580"><span style="color:#000" id="com_2690580_0_0" class="comElement" >오늘 역사 수행임 다들 수행 화이팅</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690575"><span style="color:#000" id="com_2690575_0_0" class="comElement" >아 집가고싶다 솔스갓겜👍👍👍</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690557"><span style="color:#000" id="com_2690557_0_0" class="comElement" >이제 176일된 내아들 준서 무럭무럭 자라렴!</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690543"><span style="color:#000" id="com_2690543_0_0" class="comElement" >나니요리 예약 쉽네</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690482"><span style="color:#000" id="com_2690482_0_0" class="comElement" >리우오빠나중에꼭보러갈게</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690461"><span style="color:#000" id="com_2690461_0_0" class="comElement" >예약 <font color="#cc0000">성공</font>하게해주세여</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690454"><span style="color:#000" id="com_2690454_0_0" class="comElement" >중간고사 100점 드가자</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690300"><span style="color:#000" id="com_2690300_0_0" class="comElement" >서동성 보러가자</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690283"><span style="color:#000" id="com_2690283_0_0" class="comElement" >이상형 월드컵 하는중❤️</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690276"><span style="color:#000" id="com_2690276_0_0" class="comElement" >한화이글스 손성민 화이팅</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690197"><span style="color:#000" id="com_2690197_0_0" class="comElement" >lck 티한전 직관가고싶어요</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690164"><span style="color:#000" id="com_2690164_0_0" class="comElement" >나나나난너너너나너나난</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2690072"><span style="color:#000" id="com_2690072_0_0" class="comElement" >광수중 화이팅ㅋㅋㅋ🍇🍇🍇🍇</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2689990"><span style="color:#000" id="com_2689990_0_0" class="comElement" >롤렉스 익스플로러 사고싶다</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2689959"><span style="color:#000" id="com_2689959_0_0" class="comElement" >앤팀콘쥬쥬랑꼭보러갈거야아앗</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2689919"><span style="color:#000" id="com_2689919_0_0" class="comElement" >수원 데크자리 <font color="#cc0000">성공</font>하즈아 !!</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2689862"><span style="color:#000" id="com_2689862_0_0" class="comElement" >졸려잉 다들 안녕히주무세옹</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2689726"><span style="color:#000" id="com_2689726_0_0" class="comElement" >저도 쥬쥬 보고싶어요</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2689675"><span style="color:#000" id="com_2689675_0_0" class="comElement" >대구부초 냌꺼다</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2689658"><span style="color:#000" id="com_2689658_0_0" class="comElement" >🙂🙂❤️❤️👍👍👍👍</span>
+</a></li><li class="txt1 communityArticle"><a href="bbsView.php?no=2689648"><span style="color:#000" id="com_2689648_0_0" class="comElement" >오늘 카페메모리얼 열리냐?</span>
+</a></li></ul></div>			<a href="bbs.php?tag=naver.com" style="letter-spacing:0" id="comListLink">네이버의 모든 댓글 보기</a>
+	
+</div>
+<script>
+var comlimit = 70;var sep	= '##@@!!SEPARATOR!!@@##';
+var commentFormReset	= false;
+</script>
+
+
+<div id="hash_tags" style="margin-top:10px; font-size:11pt; word-break: break-word;">
+<span>#집가고싶다</span><span>#화이팅</span><span>#티켓팅</span><span>#네이버</span></div>
+<div id="counterArea" style="font-family:arial; font-size:11pt">
+05/01 :
+<font style="font-weight:bold">128,294</font>
+&nbsp;TODAY : <font style="font-weight:bold">86,255</font> Visitors
+</div>
+<div style="margin-top:25px;background:#fff;border-radius:10px">
+	<a href="/"><img src="https://data.navyism.com/navyismLogo400.png" border="0" align="absmiddle" width="180" alt="네이비즘 서버시간 로고" title="네이비즘 서버시간 표준시간" style="border-radius:10px"></a>
+</div>
+
+
+
+<br /><br /><br />
+</div>
+<br />
+
+<script>
+checkConnectOk("`진리의 서버시간 네이비즘 : 표준시간 `72`\nticket.interpark.com`인상혁 파이팅 `23`NOL 인터파크 티켓팅\nnaver.com`모두행복해졌으면좋겟다 `12`네이버\nwww.ticketlink.co.kr`화이 `7`티켓링크\nwww.keyescape.co.kr`아야코 `2`키이스케이프 방탈출 카페\nwitchform.com`배포전가야만해 `2`윗치폼\nwww.wordhippo.com`이아인 바보 돼지 멍청이 `2`www.wordhippo.com\nwww.hddfs.com`16일 첫날부터 이지랄 하고 있음 `2`현대백화점인터넷면세점\nLIMIT_CUTS`이름을 지어주세요 `29`LIMIT_CUTS");
+
+
+var chartData3  = [{"y": "20260402","v": 3096,},{"y": "20260403","v": 3691,},{"y": "20260404","v": 2473,},{"y": "20260405","v": 2317,},{"y": "20260406","v": 3700,},{"y": "20260407","v": 3696,},{"y": "20260408","v": 3286,},{"y": "20260409","v": 3992,},{"y": "20260410","v": 4072,},{"y": "20260411","v": 2201,},{"y": "20260412","v": 2096,},{"y": "20260413","v": 3572,},{"y": "20260414","v": 3849,},{"y": "20260415","v": 4065,},{"y": "20260416","v": 6184,},{"y": "20260417","v": 4783,},{"y": "20260418","v": 2676,},{"y": "20260419","v": 2458,},{"y": "20260420","v": 4612,},{"y": "20260421","v": 4493,},{"y": "20260422","v": 5098,},{"y": "20260423","v": 4533,},{"y": "20260424","v": 5463,},{"y": "20260425","v": 2548,},{"y": "20260426","v": 2413,},{"y": "20260427","v": 4130,},{"y": "20260428","v": 4505,},{"y": "20260429","v": 5597,},{"y": "20260430","v": 4826,},{"y": "20260501","v": 3382,},{"y": "20260502","v": 2085,}];
+var chartData   = [{"y": "20250328","v": 3619,},{"y": "20250329","v": 2236,},{"y": "20250330","v": 2092,},{"y": "20250331","v": 3658,},{"y": "20250401","v": 3730,},{"y": "20250402","v": 3045,},{"y": "20250403","v": 3302,},{"y": "20250404","v": 3750,},{"y": "20250405","v": 2526,},{"y": "20250406","v": 2201,},{"y": "20250407","v": 3112,},{"y": "20250408","v": 3482,},{"y": "20250409","v": 3113,},{"y": "20250410","v": 5532,},{"y": "20250411","v": 5144,},{"y": "20250412","v": 2132,},{"y": "20250413","v": 2126,},{"y": "20250414","v": 4320,},{"y": "20250415","v": 3371,},{"y": "20250416","v": 3810,},{"y": "20250417","v": 3757,},{"y": "20250418","v": 4065,},{"y": "20250419","v": 2310,},{"y": "20250420","v": 2406,},{"y": "20250421","v": 3019,},{"y": "20250422","v": 3519,},{"y": "20250423","v": 3743,},{"y": "20250424","v": 4057,},{"y": "20250425","v": 4466,},{"y": "20250426","v": 2345,},{"y": "20250427","v": 2188,},{"y": "20250428","v": 4784,},{"y": "20250429","v": 3961,},{"y": "20250430","v": 3637,},{"y": "20250501","v": 2672,},{"y": "20250502","v": 3856,},{"y": "20250503","v": 2402,},{"y": "20250504","v": 2113,},{"y": "20250505","v": 2340,},{"y": "20250506","v": 2049,},{"y": "20250507","v": 3753,},{"y": "20250508","v": 4263,},{"y": "20250509","v": 3941,},{"y": "20250510","v": 3349,},{"y": "20250511","v": 2612,},{"y": "20250512","v": 4305,},{"y": "20250513","v": 14610,},{"y": "20250514","v": 18610,},{"y": "20250515","v": 20466,},{"y": "20250516","v": 4514,},{"y": "20250517","v": 2547,},{"y": "20250518","v": 2439,},{"y": "20250519","v": 4377,},{"y": "20250520","v": 4545,},{"y": "20250521","v": 5216,},{"y": "20250522","v": 3526,},{"y": "20250523","v": 3650,},{"y": "20250524","v": 2327,},{"y": "20250525","v": 2248,},{"y": "20250526","v": 3315,},{"y": "20250527","v": 3976,},{"y": "20250528","v": 3146,},{"y": "20250529","v": 4148,},{"y": "20250530","v": 4658,},{"y": "20250531","v": 2258,},{"y": "20250601","v": 2760,},{"y": "20250602","v": 3491,},{"y": "20250603","v": 2730,},{"y": "20250604","v": 3631,},{"y": "20250605","v": 5217,},{"y": "20250606","v": 3041,},{"y": "20250607","v": 1930,},{"y": "20250608","v": 2061,},{"y": "20250609","v": 3248,},{"y": "20250610","v": 3817,},{"y": "20250611","v": 3086,},{"y": "20250612","v": 3375,},{"y": "20250613","v": 3999,},{"y": "20250614","v": 2137,},{"y": "20250615","v": 2236,},{"y": "20250616","v": 4161,},{"y": "20250617","v": 4185,},{"y": "20250618","v": 4106,},{"y": "20250619","v": 4163,},{"y": "20250620","v": 4561,},{"y": "20250621","v": 2446,},{"y": "20250622","v": 2254,},{"y": "20250623","v": 4390,},{"y": "20250624","v": 4324,},{"y": "20250625","v": 4070,},{"y": "20250626","v": 4342,},{"y": "20250627","v": 4419,},{"y": "20250628","v": 2360,},{"y": "20250629","v": 2271,},{"y": "20250630","v": 3701,},{"y": "20250701","v": 3940,},{"y": "20250702","v": 3982,},{"y": "20250703","v": 3289,},{"y": "20250704","v": 3540,},{"y": "20250705","v": 2235,},{"y": "20250706","v": 2278,},{"y": "20250707","v": 3645,},{"y": "20250708","v": 3510,},{"y": "20250709","v": 4360,},{"y": "20250710","v": 4231,},{"y": "20250711","v": 4974,},{"y": "20250712","v": 5027,},{"y": "20250713","v": 2395,},{"y": "20250714","v": 3089,},{"y": "20250715","v": 4235,},{"y": "20250716","v": 3920,},{"y": "20250717","v": 3638,},{"y": "20250718","v": 3131,},{"y": "20250719","v": 2094,},{"y": "20250720","v": 2123,},{"y": "20250721","v": 3919,},{"y": "20250722","v": 3992,},{"y": "20250723","v": 3959,},{"y": "20250724","v": 3727,},{"y": "20250725","v": 5616,},{"y": "20250726","v": 3899,},{"y": "20250727","v": 4798,},{"y": "20250728","v": 4399,},{"y": "20250729","v": 5376,},{"y": "20250730","v": 6556,},{"y": "20250731","v": 3688,},{"y": "20250801","v": 4140,},{"y": "20250802","v": 2246,},{"y": "20250803","v": 1895,},{"y": "20250804","v": 5006,},{"y": "20250805","v": 6400,},{"y": "20250806","v": 6732,},{"y": "20250807","v": 5943,},{"y": "20250808","v": 8461,},{"y": "20250809","v": 2422,},{"y": "20250810","v": 2398,},{"y": "20250811","v": 8672,},{"y": "20250812","v": 9951,},{"y": "20250813","v": 7066,},{"y": "20250814","v": 6444,},{"y": "20250815","v": 2434,},{"y": "20250816","v": 1808,},{"y": "20250817","v": 1749,},{"y": "20250818","v": 7632,},{"y": "20250819","v": 8146,},{"y": "20250820","v": 7227,},{"y": "20250821","v": 7602,},{"y": "20250822","v": 4593,},{"y": "20250823","v": 2425,},{"y": "20250824","v": 2180,},{"y": "20250825","v": 5951,},{"y": "20250826","v": 4771,},{"y": "20250827","v": 3921,},{"y": "20250828","v": 3487,},{"y": "20250829","v": 3519,},{"y": "20250830","v": 2456,},{"y": "20250831","v": 1975,},{"y": "20250901","v": 1749,},{"y": "20250902","v": 7989,},{"y": "20250903","v": 4846,},{"y": "20250904","v": 4310,},{"y": "20250905","v": 4171,},{"y": "20250906","v": 2194,},{"y": "20250907","v": 3166,},{"y": "20250908","v": 5059,},{"y": "20250909","v": 8057,},{"y": "20250910","v": 5536,},{"y": "20250911","v": 4597,},{"y": "20250912","v": 10078,},{"y": "20250913","v": 2768,},{"y": "20250914","v": 2624,},{"y": "20250915","v": 4613,},{"y": "20250916","v": 5333,},{"y": "20250917","v": 8686,},{"y": "20250918","v": 5711,},{"y": "20250919","v": 5735,},{"y": "20250920","v": 3842,},{"y": "20250921","v": 3861,},{"y": "20250922","v": 7436,},{"y": "20250923","v": 5508,},{"y": "20250924","v": 7282,},{"y": "20250925","v": 14047,},{"y": "20250926","v": 4865,},{"y": "20250927","v": 2266,},{"y": "20250928","v": 3698,},{"y": "20250929","v": 11823,},{"y": "20250930","v": 8954,},{"y": "20251001","v": 11351,},{"y": "20251002","v": 7388,},{"y": "20251003","v": 5768,},{"y": "20251004","v": 3147,},{"y": "20251005","v": 7911,},{"y": "20251006","v": 2427,},{"y": "20251007","v": 2799,},{"y": "20251008","v": 13788,},{"y": "20251009","v": 4493,},{"y": "20251010","v": 6381,},{"y": "20251011","v": 3333,},{"y": "20251012","v": 3248,},{"y": "20251013","v": 7379,},{"y": "20251014","v": 9428,},{"y": "20251015","v": 21020,},{"y": "20251016","v": 14494,},{"y": "20251017","v": 8491,},{"y": "20251018","v": 4509,},{"y": "20251019","v": 3385,},{"y": "20251020","v": 9945,},{"y": "20251021","v": 8354,},{"y": "20251022","v": 9459,},{"y": "20251023","v": 11419,},{"y": "20251024","v": 10940,},{"y": "20251025","v": 24782,},{"y": "20251026","v": 4913,},{"y": "20251027","v": 11114,},{"y": "20251028","v": 8088,},{"y": "20251029","v": 9951,},{"y": "20251030","v": 9539,},{"y": "20251031","v": 6190,},{"y": "20251101","v": 3350,},{"y": "20251102","v": 2574,},{"y": "20251103","v": 4610,},{"y": "20251104","v": 4951,},{"y": "20251105","v": 4912,},{"y": "20251106","v": 4730,},{"y": "20251107","v": 5520,},{"y": "20251108","v": 2646,},{"y": "20251109","v": 2106,},{"y": "20251110","v": 5400,},{"y": "20251111","v": 4874,},{"y": "20251112","v": 5148,},{"y": "20251113","v": 4452,},{"y": "20251114","v": 3880,},{"y": "20251115","v": 2070,},{"y": "20251116","v": 2667,},{"y": "20251117","v": 7495,},{"y": "20251118","v": 5179,},{"y": "20251119","v": 7907,},{"y": "20251120","v": 5234,},{"y": "20251121","v": 5453,},{"y": "20251122","v": 2531,},{"y": "20251123","v": 2486,},{"y": "20251124","v": 5463,},{"y": "20251125","v": 4439,},{"y": "20251126","v": 4566,},{"y": "20251127","v": 5063,},{"y": "20251128","v": 4334,},{"y": "20251129","v": 2378,},{"y": "20251130","v": 2903,},{"y": "20251201","v": 912,},{"y": "20251202","v": 4435,},{"y": "20251203","v": 5013,},{"y": "20251204","v": 5368,},{"y": "20251205","v": 5227,},{"y": "20251206","v": 2634,},{"y": "20251207","v": 2611,},{"y": "20251208","v": 4680,},{"y": "20251209","v": 4794,},{"y": "20251210","v": 4474,},{"y": "20251211","v": 4476,},{"y": "20251212","v": 4181,},{"y": "20251213","v": 2316,},{"y": "20251214","v": 2512,},{"y": "20251215","v": 4320,},{"y": "20251216","v": 4775,},{"y": "20251217","v": 4407,},{"y": "20251218","v": 4189,},{"y": "20251219","v": 4365,},{"y": "20251220","v": 2158,},{"y": "20251221","v": 2243,},{"y": "20251222","v": 4191,},{"y": "20251223","v": 4304,},{"y": "20251224","v": 3565,},{"y": "20251225","v": 4125,},{"y": "20251226","v": 3410,},{"y": "20251227","v": 2211,},{"y": "20251228","v": 2497,},{"y": "20251229","v": 3604,},{"y": "20251230","v": 3353,},{"y": "20251231","v": 4964,},{"y": "20260101","v": 10021,},{"y": "20260102","v": 3258,},{"y": "20260103","v": 2250,},{"y": "20260104","v": 2429,},{"y": "20260105","v": 4352,},{"y": "20260106","v": 4996,},{"y": "20260107","v": 4175,},{"y": "20260108","v": 3993,},{"y": "20260109","v": 4763,},{"y": "20260110","v": 2637,},{"y": "20260111","v": 2352,},{"y": "20260112","v": 4813,},{"y": "20260113","v": 4817,},{"y": "20260114","v": 4774,},{"y": "20260115","v": 4430,},{"y": "20260116","v": 4766,},{"y": "20260117","v": 2552,},{"y": "20260118","v": 2523,},{"y": "20260119","v": 4136,},{"y": "20260120","v": 4869,},{"y": "20260121","v": 6201,},{"y": "20260122","v": 6859,},{"y": "20260123","v": 5050,},{"y": "20260124","v": 2454,},{"y": "20260125","v": 2516,},{"y": "20260126","v": 4562,},{"y": "20260127","v": 7567,},{"y": "20260128","v": 4917,},{"y": "20260129","v": 4735,},{"y": "20260130","v": 4398,},{"y": "20260131","v": 2649,},{"y": "20260201","v": 2906,},{"y": "20260202","v": 5527,},{"y": "20260203","v": 5807,},{"y": "20260204","v": 8380,},{"y": "20260205","v": 6072,},{"y": "20260206","v": 5492,},{"y": "20260207","v": 2564,},{"y": "20260208","v": 2698,},{"y": "20260209","v": 9957,},{"y": "20260210","v": 10850,},{"y": "20260211","v": 9905,},{"y": "20260212","v": 8076,},{"y": "20260213","v": 6230,},{"y": "20260214","v": 2207,},{"y": "20260215","v": 2002,},{"y": "20260216","v": 2262,},{"y": "20260217","v": 1833,},{"y": "20260218","v": 2500,},{"y": "20260219","v": 8386,},{"y": "20260220","v": 6112,},{"y": "20260221","v": 2776,},{"y": "20260222","v": 2536,},{"y": "20260223","v": 7958,},{"y": "20260224","v": 8289,},{"y": "20260225","v": 8761,},{"y": "20260226","v": 6136,},{"y": "20260227","v": 5955,},{"y": "20260228","v": 2460,},{"y": "20260301","v": 2577,},{"y": "20260302","v": 2408,},{"y": "20260303","v": 8679,},{"y": "20260304","v": 6395,},{"y": "20260305","v": 5938,},{"y": "20260306","v": 5467,},{"y": "20260307","v": 2539,},{"y": "20260308","v": 2113,},{"y": "20260309","v": 4898,},{"y": "20260310","v": 4263,},{"y": "20260311","v": 5398,},{"y": "20260312","v": 4373,},{"y": "20260313","v": 3413,},{"y": "20260314","v": 2588,},{"y": "20260315","v": 2426,},{"y": "20260316","v": 3861,},{"y": "20260317","v": 3834,},{"y": "20260318","v": 3675,},{"y": "20260319","v": 3514,},{"y": "20260320","v": 3688,},{"y": "20260321","v": 5303,},{"y": "20260322","v": 2473,},{"y": "20260323","v": 4337,},{"y": "20260324","v": 4153,},{"y": "20260325","v": 3629,},{"y": "20260326","v": 3721,},{"y": "20260327","v": 3907,},{"y": "20260328","v": 2137,},{"y": "20260329","v": 2047,},{"y": "20260330","v": 2878,},{"y": "20260331","v": 3201,},{"y": "20260401","v": 4206,},{"y": "20260402","v": 3096,},{"y": "20260403","v": 3691,},{"y": "20260404","v": 2473,},{"y": "20260405","v": 2317,},{"y": "20260406","v": 3700,},{"y": "20260407","v": 3696,},{"y": "20260408","v": 3286,},{"y": "20260409","v": 3992,},{"y": "20260410","v": 4072,},{"y": "20260411","v": 2201,},{"y": "20260412","v": 2096,},{"y": "20260413","v": 3572,},{"y": "20260414","v": 3849,},{"y": "20260415","v": 4065,},{"y": "20260416","v": 6184,},{"y": "20260417","v": 4783,},{"y": "20260418","v": 2676,},{"y": "20260419","v": 2458,},{"y": "20260420","v": 4612,},{"y": "20260421","v": 4493,},{"y": "20260422","v": 5098,},{"y": "20260423","v": 4533,},{"y": "20260424","v": 5463,},{"y": "20260425","v": 2548,},{"y": "20260426","v": 2413,},{"y": "20260427","v": 4130,},{"y": "20260428","v": 4505,},{"y": "20260429","v": 5597,},{"y": "20260430","v": 4826,},{"y": "20260501","v": 3382,},{"y": "20260502","v": 2085,}];
+CreateHostGraph();
+(adsbygoogle = window.adsbygoogle || []).push({});(adsbygoogle = window.adsbygoogle || []).push({});(adsbygoogle = window.adsbygoogle || []).push({});
+document.getElementById('inputhere').select();
+function layoutArrage()
+{
+}
+</script>
+
+<script>
+	var titleHistoryContents = "<span id=\"titleHistory_1\" class=\"historyElement\" style=\"color:#000;\">위링크처하자</span><span id=\"titleHistory_2\" class=\"historyElement\" style=\"color:#000;\">집가고싶당</span><span id=\"titleHistory_3\" class=\"historyElement\" style=\"color:#000;\">티켓팅의장인</span><span id=\"titleHistory_4\" class=\"historyElement\" style=\"color:#000;\">ddge영원하라</span><span id=\"titleHistory_5\" class=\"historyElement\" style=\"color:#000;\">민지생일❤️</span><span id=\"titleHistory_6\" class=\"historyElement\" style=\"color:#000;\">하영이생일❤️❤️❤️</span><span id=\"titleHistory_7\" class=\"historyElement\" style=\"color:#000;\">민지생일❤️</span><span id=\"titleHistory_8\" class=\"historyElement\" style=\"color:#000;\">임</span><span id=\"titleHistory_9\" class=\"historyElement\" style=\"color:#000;\">코인충전지금이니?</span><span id=\"titleHistory_10\" class=\"historyElement\" style=\"color:#000;\">왜케안와</span><span id=\"titleHistory_11\" class=\"historyElement\" style=\"color:#000;\">게이조이고</span><span id=\"titleHistory_12\" class=\"historyElement\" style=\"color:#000;\">빅나티를변기에담궜다말려</span><span id=\"titleHistory_13\" class=\"historyElement\" style=\"color:#000;\">네이버시간</span><span id=\"titleHistory_14\" class=\"historyElement\" style=\"color:#000;\">5분</span><span id=\"titleHistory_15\" class=\"historyElement\" style=\"color:#000;\">슬롯잡아야함</span><span id=\"titleHistory_16\" class=\"historyElement\" style=\"color:#000;\">이준호다이스키</span><span id=\"titleHistory_17\" class=\"historyElement\" style=\"color:#000;\">BTSARIRANGBUSAN</span><span id=\"titleHistory_18\" class=\"historyElement\" style=\"color:#000;\">티켓팅성공기원</span><span id=\"titleHistory_19\" class=\"historyElement\" style=\"color:#000;\">트릭컬연장점검그만해</span><span id=\"titleHistory_20\" class=\"historyElement\" style=\"color:#000;\">퇴근</span><span id=\"titleHistory_21\" class=\"historyElement\" style=\"color:#000;\">후</span><span id=\"titleHistory_22\" class=\"historyElement\" style=\"color:#000;\">네이버</span><span id=\"titleHistory_23\" class=\"historyElement\" style=\"color:#000;\">디맥내가살거이</span><span id=\"titleHistory_24\" class=\"historyElement\" style=\"color:#000;\">디맥</span><span id=\"titleHistory_25\" class=\"historyElement\" style=\"color:#000;\">벡스터그는누구인가그는판교에서식하는세계최강게임디렉터로</span><span id=\"titleHistory_26\" class=\"historyElement\" style=\"color:#000;\">뜸부기따오기</span><span id=\"titleHistory_27\" class=\"historyElement\" style=\"color:#000;\">다인키보드내일이야</span><span id=\"titleHistory_28\" class=\"historyElement\" style=\"color:#000;\">포기해라디붕아</span><span id=\"titleHistory_29\" class=\"historyElement\" style=\"color:#575757;\">바부</span><span id=\"titleHistory_30\" class=\"historyElement\" style=\"color:#696969;\">난중간안하는데에베베벱</span><span id=\"titleHistory_31\" class=\"historyElement\" style=\"color:#7B7B7B;\">난중간끝났는데에베베벱</span><span id=\"titleHistory_32\" class=\"historyElement\" style=\"color:#8D8D8D;\">화이팅</span><span id=\"titleHistory_33\" class=\"historyElement\" style=\"color:#8D8D8D;\">집가고시푸</span><span id=\"titleHistory_34\" class=\"historyElement\" style=\"color:#8D8D8D;\">미술수행망하뮤</span><span id=\"titleHistory_35\" class=\"historyElement\" style=\"color:#8D8D8D;\">왕선중</span><span id=\"titleHistory_36\" class=\"historyElement\" style=\"color:#9F9F9F;\">중간화이팅</span><span id=\"titleHistory_37\" class=\"historyElement\" style=\"color:#9F9F9F;\">네</span><span id=\"titleHistory_38\" class=\"historyElement\" style=\"color:#9F9F9F;\">근무</span><span id=\"titleHistory_39\" class=\"historyElement\" style=\"color:#9F9F9F;\">Odetolove~</span><span id=\"titleHistory_40\" class=\"historyElement\" style=\"color:#9F9F9F;\">네이버서버시간정확하다!!!!</span><span id=\"titleHistory_41\" class=\"historyElement\" style=\"color:#B1B1B1;\">우리학교급식개맛도리</span><span id=\"titleHistory_42\" class=\"historyElement\" style=\"color:#B1B1B1;\">티케팅전부다망하세요</span><span id=\"titleHistory_43\" class=\"historyElement\" style=\"color:#B1B1B1;\">제발저요제가아니면안되요</span><span id=\"titleHistory_44\" class=\"historyElement\" style=\"color:#B1B1B1;\">훈댕</span><span id=\"titleHistory_45\" class=\"historyElement\" style=\"color:#C3C3C3;\">서연시</span><span id=\"titleHistory_46\" class=\"historyElement\" style=\"color:#C3C3C3;\">중계중자주제신청</span><span id=\"titleHistory_47\" class=\"historyElement\" style=\"color:#C3C3C3;\">자주제신청</span><span id=\"titleHistory_48\" class=\"historyElement\" style=\"color:#D5D5D5;\">이더연</span><span id=\"titleHistory_49\" class=\"historyElement\" style=\"color:#D5D5D5;\">시험화이팅</span>";
+
+	var bestTitleContents	= new Array();
+	bestTitleContents[0]	= "경대사대부중시험안치는거어케알았죠";bestTitleContents[1]	= "너희엄마왈:니랩은비빔밥위참기름";bestTitleContents[2]	= "대구심인중화이팅!!!";bestTitleContents[3]	= "하하핳";bestTitleContents[4]	= "한번에성공";bestTitleContents[5]	= "자동차를몰꼬에요빵빵";bestTitleContents[6]	= "수업언제끝남";bestTitleContents[7]	= "벡스터그는누구인가그는판교에서식하는세계최강게임디렉터로";bestTitleContents[8]	= "";bestTitleContents[9]	= "네이버시간";</script>
+<div id="titleVote" style="-webkit-border-radius:4px; position:absolute; display:none; border:solid 1px #d0d0d0; background:#616161; width:125px; padding:8px; text-align:center; font-size:9pt; color:#d0d0d0">
+		<a href="javascript:titleVoteBest()" style="color:#ffffff">제목추천</a>  &nbsp;|&nbsp;  <a href="javascript:titleVoteWorst()" style="color:#ffffff">지워버려</a>
+</div>
+<iframe allow="autoplay" id="alramVoiceForChrome" style="display:none"></iframe>
+<iframe name="actionFrame" style="display:none"></iframe>
+<audio id="alramVoice" src="https://data.navyism.com/clock.mp3" controls preload="auto" autobuffer style="display:none"></audio>
+<script>
+var onlyTimeAutoCheck	= false;
+
+window.onresize = function()
+{
+	if(window.outerHeight < 600)
+	{
+		window.scrollTo(0,document.getElementById("siteName").offsetHeight + document.getElementById("siteName").offsetTop + 14);
+
+		if(document.getElementById("msec_check").checked)
+		{
+			var authCheckLimit	= 703;
+		}
+		else
+		{
+			var authCheckLimit	= 644;
+		}
+
+		if(window.outerWidth < authCheckLimit)
+		{
+			if(!document.getElementById("onlyTime").checked)
+			{
+				document.getElementById("onlyTime").checked	= true;
+				onlyTimeAutoCheck	= true;
+			}
+		}
+		else
+		{
+			if(onlyTimeAutoCheck && document.getElementById("onlyTime").checked)
+			{
+				document.getElementById("onlyTime").checked	= false;
+				onlyTimeAutoCheck	= false;
+			}
+		}
+	}
+}
+</script>
+
+<div id="soundOnLayer"></div>
+<script>
+document.getElementById("alramVoice").load();
+document.getElementById("alramVoice").pause();
+var promise	= document.getElementById("alramVoice").play();
+
+if (promise !== undefined) {
+	promise.then(_ => {
+		document.getElementById("alramVoice").pause();
+	}).catch(error => {
+		document.getElementById('alramOn').style.display = "block";
+		document.getElementById("alramVoice").pause();
+	});
+}	
+else
+{
+	document.getElementById("alramVoice").pause();
+}	
+
+function alramOn()
+{
+	document.getElementById("alramVoice").play();
+	document.getElementById("alramVoice").pause();
+}
+
+try
+{
+	if(!document.getElementsByClassName("communityArticle").length)
+	{
+		//document.getElementById("comListLink").style.display = "none";
+	}
+
+	var cutSize = parseInt((document.getElementById("hash_tags").offsetTop - document.getElementById("snsArea").offsetTop) / 16) + 0;
+	
+	for(var i=document.getElementsByClassName("communityArticle").length - 1; i>=document.getElementsByClassName("communityArticle").length - cutSize - 1; i--)
+	{
+		document.getElementsByClassName("communityArticle")[i].style.display = "none";
+	}
+
+	/*
+	if(document.getElementById("twitBox").style.display != "none")
+	{
+		document.getElementById("twitBox").style.height = parseInt((document.getElementById("snsArea").offsetTop - document.getElementById("hash_tags").offsetTop) + -1 - 130) + 'px'; 
+	}
+	*/
+}
+catch(e)
+{
+}
+
+
+
+
+
+
+
+
+</script>
+</div>
+<script>
+document.getElementById("main_title").innerHTML = '<a href="/awards.php?year=2026&cat=request" style="text-decoration:none" title="2026 네이비즘  어워즈 3위">🥉</a> ' + document.getElementById("main_title").innerHTML;
+</script>
+<script src="https://wcs.naver.net/wcslog.js"></script>
+<script>if(!wcs_add) var wcs_add = {}; wcs_add["wa"] = "85c90fb7f148"; wcs_do();</script>
+</body></html>
