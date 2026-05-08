@@ -105,3 +105,9 @@ def reduce_samples(samples):
         "accepted_count": len(candidates),
         "method": method,
     }
+
+
+def adaptive_count(rtt_median_ms, interval_ms=50, target_window_ms=6000,
+                   min_count=10, max_count=60):
+    estimated = math.ceil(target_window_ms / (rtt_median_ms + interval_ms))
+    return max(min_count, min(max_count, estimated))

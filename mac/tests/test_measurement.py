@@ -11,6 +11,7 @@ from measurement import (
     ci95_ms,
     select_edge_offsets,
     reduce_samples,
+    adaptive_count,
 )
 
 
@@ -95,6 +96,20 @@ class EdgeDetectionTest(unittest.TestCase):
         ]
         result = reduce_samples(samples)
         self.assertEqual(result["method"], "upper-envelope")
+
+
+class AdaptiveCountTest(unittest.TestCase):
+    def test_low_rtt_clamps_to_max(self):
+        self.assertEqual(adaptive_count(rtt_median_ms=50, interval_ms=50), 60)
+
+    def test_mid_rtt(self):
+        self.assertEqual(adaptive_count(rtt_median_ms=150, interval_ms=50), 30)
+
+    def test_high_rtt_uses_estimated(self):
+        self.assertEqual(adaptive_count(rtt_median_ms=300, interval_ms=50), 18)
+
+    def test_huge_rtt_clamps_to_min(self):
+        self.assertEqual(adaptive_count(rtt_median_ms=10_000, interval_ms=50), 10)
 
 
 if __name__ == "__main__":
