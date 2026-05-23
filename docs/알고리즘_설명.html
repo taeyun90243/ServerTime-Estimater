@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>서버시간 측정 알고리즘 설명</title>
+<style>
+  :root {
+    --accent: #03C75A;
+    --warn: #d33;
+    --bg: #fafafa;
+    --card: #fff;
+    --text: #222;
+    --gray: #666;
+    --line: #e5e5e5;
+    --code-bg: #f3f3f3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+  }
+  .wrap { max-width: 860px; margin: 40px auto; padding: 0 20px; }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 12px;
+  }
+  .subtitle { color: var(--gray); margin: 0 0 32px; }
+  .toc {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px 24px;
+    margin-bottom: 32px;
+  }
+  .toc h3 { margin: 0 0 8px; font-size: 15px; color: var(--gray); }
+  .toc ol { margin: 0; padding-left: 22px; }
+  .toc a { color: var(--text); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 28px 32px;
+    margin-bottom: 24px;
+  }
+  h2 {
+    font-size: 22px;
+    margin: 0 0 4px;
+    color: var(--accent);
+  }
+  h2 .badge {
+    display: inline-block;
+    font-size: 12px;
+    background: var(--accent);
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 12px;
+    vertical-align: middle;
+    margin-left: 8px;
+    font-weight: 600;
+  }
+  h2 .badge.warn { background: var(--warn); }
+  h3 { font-size: 17px; margin-top: 28px; margin-bottom: 8px; }
+  h4 { font-size: 14px; margin-top: 20px; margin-bottom: 6px; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px; }
+  p { margin: 8px 0; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 4px 0; }
+  code {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 14px 18px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: #f0fbf4;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.warn { border-color: var(--warn); background: #fdf0f0; }
+  .callout.warn strong { color: var(--warn); }
+  .step-list {
+    counter-reset: step;
+    list-style: none;
+    padding-left: 0;
+  }
+  .step-list > li {
+    counter-increment: step;
+    position: relative;
+    padding: 12px 12px 12px 56px;
+    margin-bottom: 10px;
+    background: #fafcff;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .step-list > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 14px;
+    top: 12px;
+    width: 30px;
+    height: 30px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .step-list.warn > li::before { background: var(--warn); }
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .compare > div {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px 18px;
+    background: #fafcff;
+  }
+  .compare h4 { margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; }
+  th { background: var(--code-bg); font-weight: 600; }
+  .formula {
+    text-align: center;
+    background: #fff8e1;
+    padding: 12px;
+    border-radius: 6px;
+    margin: 12px 0;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 15px;
+  }
+  .small { font-size: 13px; color: var(--gray); }
+  .pipeline {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0;
+    font-size: 13px;
+  }
+  .pipeline .box {
+    background: var(--accent);
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+  .pipeline .arrow { color: var(--gray); font-size: 18px; }
+  .pipeline .box.warn { background: var(--warn); }
+  .pipeline .box.gray { background: var(--gray); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>서버시간 측정 알고리즘 설명</h1>
+  <p class="subtitle">초기 측정과 F5 재측정이 어떻게 다른지, 처음 보는 사람도 한눈에 이해할 수 있게 정리한 문서.</p>
+
+  <div class="toc">
+    <h3>목차</h3>
+    <ol>
+      <li><a href="#why">왜 이런 알고리즘이 필요한가?</a></li>
+      <li><a href="#building-blocks">공통 빌딩 블록</a></li>
+      <li><a href="#initial">초기 측정 알고리즘</a></li>
+      <li><a href="#remeasure">F5 재측정 알고리즘</a></li>
+      <li><a href="#compare">한눈에 비교</a></li>
+      <li><a href="#faq">자주 묻는 질문</a></li>
+    </ol>
+  </div>
+
+  <!-- =================== 1. WHY =================== -->
+  <div class="card" id="why">
+    <h2>1. 왜 이런 알고리즘이 필요한가?</h2>
+    <p>특정 웹사이트(예: 인터파크, 네이버)의 <strong>정확한 서버 시각</strong>을 알아내고 싶다. 문제는 두 가지다.</p>
+    <ol>
+      <li>HTTP 응답의 <code>Date</code> 헤더는 <strong>초 단위</strong>만 알려준다. 밀리초는 직접 못 얻음.</li>
+      <li>요청을 보내고 응답을 받는 사이 <strong>네트워크 지연(RTT)</strong>이 있어서, 응답이 도착한 순간 헤더의 시각은 이미 과거다.</li>
+    </ol>
+    <div class="callout">
+      <strong>목표 정확도: ±50ms 이내.</strong> 네이비즘(±100~500ms)보다 더 정밀하게.
+    </div>
+    <p>이를 달성하기 위해 <em>여러 번 샘플링 → 통계 처리 → Edge(초 경계) 검출</em>이라는 단계를 거친다.</p>
+  </div>
+
+  <!-- =================== 2. BUILDING BLOCKS =================== -->
+  <div class="card" id="building-blocks">
+    <h2>2. 공통 빌딩 블록</h2>
+    <p>초기 측정도 재측정도 <strong>핵심 엔진은 같다</strong>. 그 엔진의 이름은 <code>Invoke-AdaptiveMultiSample</code>이다.</p>
+
+    <h3>2.1 1샘플이 하는 일</h3>
+    <ol>
+      <li><strong>t1</strong>: 요청 직전 PC 시각 기록 (모노토닉 클럭)</li>
+      <li>대상 서버에 HTTP HEAD 요청 (네이버는 시간 API)</li>
+      <li><strong>t2</strong>: 응답 직후 PC 시각 기록</li>
+      <li>응답의 <code>Date</code> 헤더 파싱 → <strong>Ts</strong> (서버가 응답을 보낸 시각, 초 단위)</li>
+      <li><code>RTT = t2 - t1</code>, <code>raw offset = (Ts + RTT/2) − t2</code> 계산</li>
+    </ol>
+
+    <div class="formula">
+      서버 추정 시각 ≈ Ts + RTT/2 &nbsp;&nbsp;(Cristian 알고리즘)
+    </div>
+
+    <h3>2.2 적응형 샘플링</h3>
+    <p>1샘플로는 부정확하다. 여러 번 모은 다음 통계 처리해야 한다. 윈도우 길이는 <strong>약 6초</strong>로 고정한다.</p>
+    <div class="formula">
+      Count = ceil(6000 / (RTT + 50)) &nbsp;&nbsp; [10 ≤ Count ≤ 60]
+    </div>
+    <ul>
+      <li><strong>샘플 간격</strong>: 50ms 고정 (서버 매너상 하한)</li>
+      <li><strong>RTT가 작을수록</strong> 샘플을 많이 (최대 60개), 클수록 적게 (최소 10개)</li>
+      <li>총 측정 시간은 어떤 환경에서든 약 6초로 일정</li>
+    </ul>
+    <p class="small">RTT가 매우 큰 환경(>500ms)에서는 MinCount=10 때문에 6초보다 길어질 수 있다. 의도된 동작.</p>
+
+    <h3>2.3 Edge Detection (초 경계 검출)</h3>
+    <p><code>Date</code> 헤더는 초 단위라 ms를 직접 못 본다. 대신 <strong>헤더가 N초 → N+1초로 바뀌는 순간</strong>을 인접한 두 샘플 사이에서 포착한다. 이 경계 시각이 곧 서버의 정수 초 경계다.</p>
+    <p>검출된 edge들의 offset의 <strong>중앙값(median)</strong>을 최종 결과로 쓴다. (평균은 outlier에 약함)</p>
+    <div class="callout">
+      <strong>왜 중앙값?</strong> 60개 샘플 중 몇 개가 패킷 지연으로 튀어도 중앙값은 거의 안 흔들린다.
+    </div>
+
+    <h3>2.4 정확도 이론치</h3>
+    <div class="formula">
+      σ_final ≈ 0.362 × √(1000 × (RTT + 50) / N)
+    </div>
+    <table>
+      <tr><th>RTT</th><th>이론 σ_final</th><th>실측 (≈1.5×)</th></tr>
+      <tr><td>50ms</td><td>±15ms</td><td>±20ms</td></tr>
+      <tr><td>150ms</td><td>±25ms</td><td>±35ms</td></tr>
+      <tr><td>300ms</td><td>±37ms</td><td>±55ms</td></tr>
+    </table>
+    <p class="small">RTT 200ms 이하에서 목표 ±50ms 달성.</p>
+  </div>
+
+  <!-- =================== 3. INITIAL MEASUREMENT =================== -->
+  <div class="card" id="initial">
+    <h2>3. 초기 측정 알고리즘<span class="badge">최초 1회</span></h2>
+    <p>프로그램이 처음 시작될 때, 또는 새 URL을 입력했을 때 딱 한 번 동작한다.</p>
+
+    <h4>언제 실행되는가</h4>
+    <ul>
+      <li><code>ServerTimeProbe.exe</code> 실행 시 URL이 주어진 경우 (즉시)</li>
+      <li>브라우저에서 URL 입력창에 새 URL을 제출한 경우</li>
+    </ul>
+
+    <h4>흐름</h4>
+    <ol class="step-list">
+      <li><strong>준비</strong>: 상태 저장소 초기화, 대상 URL 설정</li>
+      <li><strong>RTT 추정 (3샘플)</strong>: 첫 3개 샘플로 RTT median을 구한다</li>
+      <li><strong>샘플 수 결정</strong>: <code>Count = ceil(6000/(RTT+50))</code>, [10, 60] 클램프</li>
+      <li><strong>나머지 샘플 수집</strong>: 50ms 간격으로 Count개까지 채운다</li>
+      <li><strong>Edge 검출</strong>: 인접 샘플 사이 Date 초 전환을 찾아 edge offset 계산</li>
+      <li><strong>중앙값 채택</strong>: edge offset들의 median이 최종 오프셋</li>
+      <li><strong>저장</strong>: <code>state.OffsetMs</code>에 기록 → 시계가 동작 시작</li>
+    </ol>
+
+    <div class="pipeline">
+      <div class="box">시작</div><div class="arrow">→</div>
+      <div class="box">3샘플 RTT 추정</div><div class="arrow">→</div>
+      <div class="box">Count 결정</div><div class="arrow">→</div>
+      <div class="box">샘플 채우기</div><div class="arrow">→</div>
+      <div class="box">Edge 검출</div><div class="arrow">→</div>
+      <div class="box">중앙값</div><div class="arrow">→</div>
+      <div class="box">저장</div>
+    </div>
+
+    <div class="callout">
+      <strong>핵심 특징</strong>:
+      <ul style="margin: 6px 0;">
+        <li>이전 오프셋 없음 → <strong>무조건 첫 결과를 그대로 채택</strong></li>
+        <li>재시도 없음</li>
+        <li>총 소요 시간: 약 6초 (RTT 큰 환경에서 더 길 수 있음)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- =================== 4. REMEASURE =================== -->
+  <div class="card" id="remeasure">
+    <h2>4. F5 재측정 알고리즘<span class="badge warn">F5 누를 때만</span></h2>
+    <p>이미 초기 측정이 끝난 상태에서, <strong>브라우저 새로고침(F5)</strong>이 일어났을 때만 동작한다. 1분마다 자동으로 돌지 않는다.</p>
+
+    <div class="callout warn">
+      <strong>주의</strong>: 재측정은 시간이 오래 걸릴 수 있다 (최악의 경우 약 12초). 이는 의도된 안전 장치다 — 아래 5번 단계를 참고.
+    </div>
+
+    <h4>언제 실행되는가</h4>
+    <ul>
+      <li>브라우저에서 <kbd>F5</kbd> 또는 페이지 재진입</li>
+      <li>같은 URL을 다시 측정하는 경우</li>
+    </ul>
+    <p class="small">중요: 첫 페이지 로드는 재측정이 아니다. 두 번째 이후의 <code>/</code> 요청부터.</p>
+
+    <h4>흐름</h4>
+    <ol class="step-list warn">
+      <li><strong>트리거</strong>: 서버가 <code>/</code> 요청을 받음 → MeasureTimer 시작 (100ms 후 발동)</li>
+      <li><strong>1회차 측정</strong>: 빌딩 블록 그대로 적용 (약 6초)</li>
+      <li><strong>편차 검사</strong>: 새 오프셋과 <strong>기존 오프셋의 차이</strong>를 계산<br>
+        <code>|new − previous| ≤ 100ms</code> 이면 → <strong>수락</strong>, 종료
+      </li>
+      <li><strong>2회차 측정 (편차 큰 경우만)</strong>: 한 번 더 6초 측정. 다시 차이 ≤ 100ms면 수락
+      </li>
+      <li><strong>거부 처리</strong>: 2회차도 100ms 초과면 → <strong>새 값 버리고 기존 오프셋 유지</strong>, "재측정 편차 Nms 초과: 기존값 유지" 표시</li>
+    </ol>
+
+    <div class="pipeline">
+      <div class="box warn">F5 감지</div><div class="arrow">→</div>
+      <div class="box">1회차 6초</div><div class="arrow">→</div>
+      <div class="box gray">편차 ≤ 100ms?</div><div class="arrow">→</div>
+      <div class="box">수락</div>
+    </div>
+    <div class="pipeline">
+      <div class="box gray">편차 &gt; 100ms</div><div class="arrow">→</div>
+      <div class="box">2회차 6초</div><div class="arrow">→</div>
+      <div class="box gray">편차 ≤ 100ms?</div><div class="arrow">→</div>
+      <div class="box">수락 (2회차 반영)</div>
+    </div>
+    <div class="pipeline">
+      <div class="box gray">2회차도 초과</div><div class="arrow">→</div>
+      <div class="box warn">거부 (기존값 유지)</div>
+    </div>
+
+    <h4>왜 재시도/거부 장치가 있는가?</h4>
+    <p>네트워크 일시적 흔들림이나 캐시/프록시 개입으로 한 번의 측정이 크게 튈 수 있다. 이때 새 값을 그대로 채택하면 시계가 갑자기 잘못된 시각으로 점프한다. 그래서:</p>
+    <ul>
+      <li>새 값이 기존과 <strong>크게 차이나면 의심</strong>한다.</li>
+      <li>한 번 더 측정해서 <strong>같은 결론이 두 번 나오면</strong> 진짜 변화로 인정 (수락).</li>
+      <li>그래도 안 맞으면 일시적 이상치로 판단하고 <strong>기존값을 지킨다</strong>.</li>
+    </ul>
+
+    <h4>클라이언트 측 처리 (clock.js)</h4>
+    <ul>
+      <li>새 오프셋과 현재 표시값 차이 <strong>≤ 120ms</strong>: 천천히 슬루잉(slewing)으로 부드럽게 보정</li>
+      <li>차이 <strong>&gt; 120ms</strong>: 즉시 점프</li>
+      <li>목적: 측정값의 작은 흔들림이 초침의 위상 점프로 보이지 않게 함</li>
+    </ul>
+  </div>
+
+  <!-- =================== 5. COMPARE =================== -->
+  <div class="card" id="compare">
+    <h2>5. 한눈에 비교</h2>
+    <table>
+      <tr><th></th><th>초기 측정</th><th>F5 재측정</th></tr>
+      <tr><td>언제</td><td>프로그램 시작 / 새 URL 제출</td><td>F5 또는 페이지 재진입</td></tr>
+      <tr><td>측정 엔진</td><td colspan="2" style="text-align: center;"><code>Invoke-AdaptiveMultiSample</code> (동일)</td></tr>
+      <tr><td>샘플 수</td><td colspan="2" style="text-align: center;">10~60개, RTT에 따라 적응형</td></tr>
+      <tr><td>1회 소요</td><td colspan="2" style="text-align: center;">약 6초</td></tr>
+      <tr><td>이전 값과 비교</td><td>비교 안 함</td><td>편차 ≤ 100ms 검사</td></tr>
+      <tr><td>재시도</td><td>없음</td><td>최대 1회 (총 2회 측정)</td></tr>
+      <tr><td>최악 시간</td><td>약 6초</td><td>약 12초</td></tr>
+      <tr><td>실패 시</td><td>"측정 실패" 표시</td><td>기존 오프셋 유지</td></tr>
+      <tr><td>자동 반복</td><td colspan="2" style="text-align: center;">없음 — F5 수동 트리거만</td></tr>
+    </table>
+  </div>
+
+  <!-- =================== 6. FAQ =================== -->
+  <div class="card" id="faq">
+    <h2>6. 자주 묻는 질문</h2>
+
+    <h3>Q. 왜 자동으로 1분마다 재측정하지 않나?</h3>
+    <p>과거 1분 자동 재측정 방식은 초침이 미세하게 흔들리는 위상지연을 유발했다. 사용자가 원할 때만 새로고침으로 재측정하도록 변경됨 (2026-05-02 수정).</p>
+
+    <h3>Q. 6초 약속인데 실제로는 더 걸리는 것 같다.</h3>
+    <p>두 가지 가능성:</p>
+    <ul>
+      <li><strong>재시도 발동</strong>: 1회차 편차가 100ms를 넘으면 자동으로 2회차가 돌아 총 약 12초가 된다.</li>
+      <li><strong>RTT가 매우 큼</strong>: 500ms 이상이면 MinCount=10 때문에 6초보다 길어진다.</li>
+    </ul>
+
+    <h3>Q. 클라이언트는 매초 서버에 요청을 보내나?</h3>
+    <p>아니다. 1초마다 <code>/api/state</code>를 폴링해 상태만 확인한다. 시각 표시는 클라이언트의 <code>performance.now()</code>로 보간한다. F5를 누르지 않으면 측정 자체가 발생하지 않는다.</p>
+
+    <h3>Q. NTP 정보는 어디에 쓰이나?</h3>
+    <p>표시용. PC 시계가 NTP와 얼마나 어긋났는지 알려주는 참고치다. 오프셋 계산에는 사용하지 않는다.</p>
+
+    <h3>Q. 네이버는 왜 다른가?</h3>
+    <p>네이버는 자체 시간 API(<code>ts-proxy.naver.com/dcontent/util/time.naver</code>)가 ms 정밀도로 시각을 직접 알려준다. 그래서 Edge Detection이 필요 없고, 샘플들의 raw offset을 그대로 통계 처리한다. 적응형 샘플링 로직은 동일하게 적용.</p>
+  </div>
+
+  <p class="small" style="text-align: center; margin: 32px 0;">
+    이 문서는 <code>docs/알고리즘_설명.html</code>에 있다. 코드 변경 시 함께 갱신할 것.
+  </p>
+
+</div>
+</body>
+</html>
