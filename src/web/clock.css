@@ -49,6 +49,14 @@ body {
   cursor: default;
 }
 
+.notice {
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 600;
+  margin: -12px 0 20px;
+  text-align: center;
+}
+
 .clock-face { position: relative; width: 360px; height: 360px; margin: 0 auto; }
 .clock-face svg { display: block; }
 
