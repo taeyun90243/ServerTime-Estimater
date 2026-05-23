@@ -54,6 +54,33 @@ function Get-OffsetMs {
     return ($ServerDateMs + $RttMs / 2) - $PcAtT2Ms
 }
 
+function Invoke-RangeGetDateProbe {
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [int]$TimeoutSec = 5
+    )
+
+    $request = [System.Net.HttpWebRequest]::CreateHttp($Url)
+    $request.Method = 'GET'
+    $request.UserAgent = $script:ProbeUserAgent
+    $request.Timeout = $TimeoutSec * 1000
+    $request.ReadWriteTimeout = $TimeoutSec * 1000
+    $request.AllowAutoRedirect = $true
+    $request.AddRange(0, 0)
+
+    $response = $null
+    try {
+        $response = [System.Net.HttpWebResponse]$request.GetResponse()
+        return [PSCustomObject]@{
+            Headers = @{
+                Date = $response.Headers['Date']
+            }
+        }
+    } finally {
+        if ($response) { $response.Dispose() }
+    }
+}
+
 function Invoke-HeadProbe {
     param(
         [Parameter(Mandatory)][string]$Url,
@@ -71,13 +98,7 @@ function Invoke-HeadProbe {
     } catch {
         try {
             $t1 = [System.Diagnostics.Stopwatch]::GetTimestamp()
-            $resp = Invoke-WebRequest `
-                -Uri $Url `
-                -Method Get `
-                -Headers @{ Range = 'bytes=0-0' } `
-                -TimeoutSec $TimeoutSec `
-                -UseBasicParsing `
-                -UserAgent $script:ProbeUserAgent
+            $resp = Invoke-RangeGetDateProbe -Url $Url -TimeoutSec $TimeoutSec
         } catch {
             throw "HTTP date probe failed: $_"
         }

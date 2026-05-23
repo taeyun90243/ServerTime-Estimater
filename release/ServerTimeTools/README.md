@@ -60,9 +60,26 @@ ServerTimeProbe.exe
 
 ## 요구사항
 
-- Windows 10 / 11 (PowerShell 5.1 이상 기본 탑재)
-- 인터넷 연결
-- (선택) UDP 123 허용 — NTP 정보 표시용. 막혀있어도 도구는 정상 동작
+### 실행 환경
+
+- 운영체제: Windows 10 또는 Windows 11
+- PowerShell: Windows PowerShell 5.1 이상
+  - Windows 10/11에는 기본 포함되어 있다.
+  - PowerShell 7.x(`pwsh`)도 지원한다. `run.bat`은 `pwsh`가 있으면 우선 사용하고, 없으면 Windows PowerShell 5.1로 실행한다.
+  - `ServerTimeProbe.exe` 런처는 Windows PowerShell(`powershell.exe`)로 `src\probe.ps1`을 실행한다.
+- 브라우저: Microsoft Edge 또는 Chrome 계열 최신 브라우저 권장
+- 네트워크: HTTP/HTTPS 외부 접속 가능해야 함
+- 선택: UDP 123 허용
+  - NTP 참고 정보 표시용이다.
+  - 막혀 있어도 서버시간 측정 자체는 정상 동작한다.
+
+Python은 실행에 필요 없다. `ServerTimeClicker.exe`도 빌드된 실행 파일을 쓰면 Python 설치가 필요 없다.
+
+### 개발/빌드 환경
+
+- PowerShell 5.1 이상 또는 PowerShell 7.x
+- Python 3.10 이상: EXE 런처/클리커를 다시 빌드할 때만 필요
+- PyInstaller: `tools\server-time-probe-exe\build-run-exe.bat` 또는 `addons\auto-clicker-gui\build-exe.bat`로 EXE를 다시 만들 때 필요
 
 ## 문서
 

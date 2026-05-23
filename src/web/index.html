@@ -35,6 +35,22 @@
     <div class="stats" id="stats"></div>
     <div class="ntp" id="ntp"></div>
     <div class="status" id="status"></div>
+    <button class="details-toggle" id="details-toggle" type="button">측정 상세 보기</button>
+    <div class="details" id="details" hidden>
+      <div class="details-summary" id="details-summary"></div>
+      <div class="details-note">
+        점 위치는 응답 도착 시각이 아니라 서버 처리 추정 시각(t2 - RTT/2)입니다.
+        빨간 edge는 Date 초가 바뀐 두 서버 처리 추정점 사이의 중간입니다.
+      </div>
+      <svg class="timeline" id="timeline" viewBox="0 0 720 200" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="details-legend">
+        <span class="legend-item"><span class="dot dot-green"></span>샘플 (Date 짝수초)</span>
+        <span class="legend-item"><span class="dot dot-blue"></span>샘플 (Date 홀수초)</span>
+        <span class="legend-item"><span class="edge-mark"></span>edge (Date N→N+1)</span>
+        <span class="legend-item"><span class="dot dot-gap"></span>RTT 큼 (median×2 이상)</span>
+      </div>
+      <div class="details-tooltip" id="details-tooltip" hidden></div>
+    </div>
   </main>
   <script src="/clock.js"></script>
 </body>

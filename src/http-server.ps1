@@ -19,6 +19,11 @@ function New-StateStore {
         RttMedianMs   = 0.0
         SigmaMs       = 0.0
         Ci95Ms        = 0.0
+        SampleCount   = 0
+        AcceptedCount = 0
+        Method        = ''
+        LastSamples   = @()
+        LastEdges     = @()
         Status        = 'idle'
         NtpInfo       = $null
     })
@@ -94,6 +99,8 @@ function Handle-Request {
         Write-StaticFile $resp (Join-Path $webRoot 'clock.js') 'application/javascript; charset=utf-8'
     } elseif ($path -eq '/api/state') {
         Write-StateJson $resp $state
+    } elseif ($path -eq '/api/samples') {
+        Write-SamplesJson $resp $state
     } elseif ($path -eq '/api/target') {
         if ($req.HttpMethod -ne 'POST') {
             $resp.StatusCode = 405
@@ -211,9 +218,31 @@ function Write-StateJson {
         rttMedianMs    = $state.RttMedianMs
         sigmaMs        = $state.SigmaMs
         ci95Ms         = $state.Ci95Ms
+        sampleCount    = $state.SampleCount
+        acceptedCount  = $state.AcceptedCount
+        method         = $state.Method
         status         = $state.Status
         pcSendTimeAtMs = $pcSendTimeAtMs
         ntpInfo        = $state.NtpInfo
+    }
+    Write-JsonResponse $resp $payload
+}
+
+function Write-SamplesJson {
+    param($resp, $state)
+    $payload = @{
+        host          = $state.Host
+        targetUrl     = $state.TargetUrl
+        lastMeasureAt = if ($state.LastMeasureAt) { $state.LastMeasureAt.ToString('o') } else { $null }
+        method        = $state.Method
+        offsetMs      = $state.OffsetMs
+        rttMedianMs   = $state.RttMedianMs
+        sigmaMs       = $state.SigmaMs
+        ci95Ms        = $state.Ci95Ms
+        sampleCount   = $state.SampleCount
+        acceptedCount = $state.AcceptedCount
+        samples       = @($state.LastSamples)
+        edges         = @($state.LastEdges)
     }
     Write-JsonResponse $resp $payload
 }

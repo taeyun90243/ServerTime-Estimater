@@ -32,6 +32,11 @@ if ($url) {
         $state.RttMedianMs   = $result.RttMedianMs
         $state.SigmaMs       = $result.SigmaMs
         $state.Ci95Ms        = $result.Ci95Ms
+        $state.SampleCount   = $result.SampleCount
+        $state.AcceptedCount = $result.AcceptedCount
+        $state.Method        = $result.Method
+        $state.LastSamples   = $result.Samples
+        $state.LastEdges     = $result.Edges
         $state.LastMeasureAt = Get-PcUtcNow
         $state.Status        = 'ok'
         Write-Host "초기 오프셋: $([Math]::Round($result.OffsetMs,1)) ms (±$([Math]::Round($result.Ci95Ms,1)))"
@@ -117,6 +122,11 @@ $measureSubscription = Register-ObjectEvent `
                 $s.RttMedianMs   = $lastResult.RttMedianMs
                 $s.SigmaMs       = $lastResult.SigmaMs
                 $s.Ci95Ms        = $lastResult.Ci95Ms
+                $s.SampleCount   = $lastResult.SampleCount
+                $s.AcceptedCount = $lastResult.AcceptedCount
+                $s.Method        = $lastResult.Method
+                $s.LastSamples   = $lastResult.Samples
+                $s.LastEdges     = $lastResult.Edges
                 $s.LastMeasureAt = Get-PcUtcNow
                 $s.LastRemeasureResult = 'accepted'
                 $s.PendingTargetChange = $false
