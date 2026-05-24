@@ -109,12 +109,11 @@
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'URL 설정 실패');
       const nextTargetUrl = data.targetUrl || '';
-      const targetChanged = nextTargetUrl !== (activeTargetUrl || '');
       activeTargetUrl = nextTargetUrl;
       targetInput.value = activeTargetUrl;
-      if (targetChanged) resetClockBase();
-      localReloadRemeasure = true;
-      setStatusText(targetChanged ? '초기 측정 중... (약 6초)' : '재측정 중... (약 6초)', false, true);
+      resetClockBase();
+      localReloadRemeasure = false;
+      setStatusText('초기 측정 중... (20초 이내)', false, true);
       await fetchState();
     } catch (e) {
       setStatusText(e.message || 'URL 설정 실패', true, true);
@@ -157,9 +156,7 @@
         setClockBase(serverAtSend + lag, t1);
       }
       state = data;
-      if (data.status === 'measuring' || data.status === 'queued') {
-        localReloadRemeasure = true;
-      } else if (data.lastMeasureRequestedAt && data.lastMeasureAt &&
+      if (data.lastMeasureRequestedAt && data.lastMeasureAt &&
           new Date(data.lastMeasureAt).getTime() >= new Date(data.lastMeasureRequestedAt).getTime()) {
         if (performance.now() >= reloadNoticeUntilMs) localReloadRemeasure = false;
       } else if (data.lastMeasureRequestedAt && data.lastRemeasureFinishedAt &&
@@ -207,7 +204,7 @@
 
   function hasPendingRemeasure() {
     if (!state || !state.lastMeasureRequestedAt) return false;
-    if (!state.lastMeasureAt) return true;
+    if (!state.lastMeasureAt) return false;
     return new Date(state.lastMeasureRequestedAt).getTime() > new Date(state.lastMeasureAt).getTime();
   }
 
@@ -234,7 +231,7 @@
         setStatusText('측정 대기 중...', false, true);
       } else if (state.status === 'measuring') {
         const isRemeasure = hasPendingRemeasure() || localReloadRemeasure;
-        setStatusText(isRemeasure ? '재측정 중... (약 6초)' : '초기 측정 중... (약 6초)', false, true);
+        setStatusText(isRemeasure ? '재측정 중... (15초 이내)' : '초기 측정 중... (20초 이내)', false, true);
       } else if (state.status === 'failed') {
         setStatusText('측정 실패 (URL 확인 후 재시도)', true, true);
       }
@@ -305,12 +302,15 @@
     } else if (state.status === 'queued') {
       setStatusText('측정 대기 중...', false, true);
     } else if (state.status === 'measuring') {
-      setStatusText(hasPendingRemeasure() || localReloadRemeasure ? '재측정 중... (약 6초)' : '초기 측정 중...', false, hasPendingRemeasure() || localReloadRemeasure);
+      setStatusText(hasPendingRemeasure() || localReloadRemeasure ? '재측정 중... (15초 이내)' : '초기 측정 중... (20초 이내)', false, hasPendingRemeasure() || localReloadRemeasure);
     } else if (state.lastRemeasureResult === 'failed-insufficient-edges') {
       setStatusText('재측정 실패 (edge 부족): 기존값 유지', true, true);
     } else if (state.lastRemeasureResult === 'rejected') {
       const delta = Math.round(state.lastRemeasureDeltaMs || 0);
       setStatusText(`재측정 편차 ${delta}ms 초과: 기존값 유지`, true, true);
+    } else if (state.lastRemeasureResult === 'kept-small-delta') {
+      const delta = Math.round(state.lastRemeasureDeltaMs || 0);
+      setStatusText(`재측정 차이 ${delta}ms: 기존값 유지`, false, true);
     } else if (state.lastRemeasureResult === 'accepted' && state.lastRemeasureAttempts > 1) {
       setStatusText('재측정 완료 (2회차 반영)', false, true);
     } else if (hasPendingRemeasure() || localReloadRemeasure) {

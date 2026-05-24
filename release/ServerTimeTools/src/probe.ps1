@@ -25,9 +25,9 @@ $state.TargetUrl = $url
 if ($url) {
     $state.Host = ([Uri]$url).Host
     $state.Status = 'measuring'
-    Write-Host "초기 측정 (적응형, 약 6초): $url"
+    Write-Host "초기 측정 (20초 이내): $url"
     try {
-        $result = Invoke-AdaptiveMultiSample -Url $url
+        $result = Invoke-AdaptiveMultiSample -Url $url -MaxTotalMs 20000
         $state.OffsetMs      = $result.OffsetMs
         $state.RttMedianMs   = $result.RttMedianMs
         $state.SigmaMs       = $result.SigmaMs
@@ -95,18 +95,20 @@ $measureSubscription = Register-ObjectEvent `
             $previousOffsetMs = [double]$s.OffsetMs
             $isTargetChange = [bool]$s.PendingTargetChange -or (-not $s.LastMeasureAt)
             $accepted = $false
+            $keepExisting = $false
             $insufficientEdges = $false
             $lastResult = $null
             $lastDeltaMs = $null
 
-            # 진짜 재측정(타겟 변경 아님)만 15초 하드캡. 캡은 2회 시도 전체에 공유.
-            # 타겟 변경/첫 측정은 무제한(MaxTotalMs=0)으로 edge 적어도 띄움.
+            # 재측정은 15초 하드캡, 첫 측정/타겟 변경은 20초 하드캡.
+            # 재측정 캡은 2회 시도 전체에 공유.
+            $InitialMeasureBudgetMs = 20000
             $RemeasureBudgetMs = 15000
             $budgetSw = [System.Diagnostics.Stopwatch]::StartNew()
 
             for ($attempt = 1; $attempt -le 2; $attempt++) {
                 if ($isTargetChange) {
-                    $maxTotalMs = 0
+                    $maxTotalMs = $InitialMeasureBudgetMs
                 } else {
                     $remainingMs = $RemeasureBudgetMs - $budgetSw.Elapsed.TotalMilliseconds
                     # 2회차를 시작할 시간이 부족하면 더 시도 안 함(기존값 유지로 귀결).
@@ -123,6 +125,7 @@ $measureSubscription = Register-ObjectEvent `
                 $decision = Get-RemeasureAttemptDecision -IsTargetChange $isTargetChange `
                     -AcceptedCount ([int]$r.AcceptedCount) -DeltaMs $lastDeltaMs
                 if ($decision -eq 'accept') { $accepted = $true; break }
+                if ($decision -eq 'keep-existing') { $keepExisting = $true; break }
                 if ($decision -eq 'fail-insufficient') { $insufficientEdges = $true; break }
 
                 # 'delta-exceeded' → 재시도
@@ -156,6 +159,16 @@ $measureSubscription = Register-ObjectEvent `
                     sampleCount = $lastResult.SampleCount; acceptedCount = $lastResult.AcceptedCount
                     attempt = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     method = $lastResult.Method
+                }
+            } elseif ($keepExisting) {
+                # 기존값과 거의 같으면 미세한 측정 흔들림으로 offset을 덮어쓰지 않는다.
+                $s.LastRemeasureResult = 'kept-small-delta'
+                $s.Status = 'ok'
+                Write-LogEvent @{
+                    ev = 'remeasure_kept_small_delta'; host = $s.Host
+                    attempt = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
+                    previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
+                    thresholdMs = 30
                 }
             } elseif ($insufficientEdges) {
                 # edge 부족: 적은 edge로 갱신하지 않고 기존 offset 유지. 실패만 표시.

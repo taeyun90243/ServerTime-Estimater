@@ -40,6 +40,23 @@ Describe 'HTTP server target state' {
         $state.Status | Should Be 'queued'
     }
 
+    It 'clears previous measurement when explicit initial measure is requested for same URL' {
+        $state = New-StateStore
+        $state.TargetUrl = 'https://example.com/'
+        $state.Host = 'example.com'
+        $state.LastMeasureAt = [DateTime]::new(2026,5,2,8,0,0,[DateTimeKind]::Utc)
+        $state.RttMedianMs = 12.3
+        $state.SigmaMs = 4.5
+        $state.Ci95Ms = 6.7
+
+        Set-TargetState -State $state -Url 'https://example.com/' -ForceInitialMeasure $true
+
+        $state.PendingTargetChange | Should Be $true
+        $state.LastMeasureAt | Should Be $null
+        $state.RttMedianMs | Should Be 0.0
+        $state.Status | Should Be 'queued'
+    }
+
     It 'clears previous measurement when the URL changes' {
         $state = New-StateStore
         $state.TargetUrl = 'https://example.com/'

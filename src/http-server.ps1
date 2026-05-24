@@ -140,11 +140,12 @@ function Normalize-TargetUrl {
 function Set-TargetState {
     param(
         [Parameter(Mandatory)]$State,
-        [Parameter(Mandatory)][string]$Url
+        [Parameter(Mandatory)][string]$Url,
+        [bool]$ForceInitialMeasure = $false
     )
 
     $uri = [Uri]$Url
-    $isSameMeasuredTarget = $State.TargetUrl -and $State.TargetUrl -eq $Url -and $State.LastMeasureAt
+    $isSameMeasuredTarget = (-not $ForceInitialMeasure) -and $State.TargetUrl -and $State.TargetUrl -eq $Url -and $State.LastMeasureAt
 
     $State.Host = $uri.Host
     $State.TargetUrl = $Url
@@ -174,7 +175,7 @@ function Set-TargetFromRequest {
         $body = $reader.ReadToEnd()
         $payload = if ($body) { $body | ConvertFrom-Json } else { $null }
         $url = Normalize-TargetUrl -Url ([string]$payload.url)
-        Set-TargetState -State $state -Url $url
+        Set-TargetState -State $state -Url $url -ForceInitialMeasure $true
 
         Write-LogEvent @{ ev = 'target_changed'; host = $state.Host; url = $state.TargetUrl }
         if ($state.MeasureTimer) { $state.MeasureTimer.Start() }

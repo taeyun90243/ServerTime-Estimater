@@ -242,17 +242,20 @@ function Get-RemeasureAttemptDecision {
     # 재측정 1회 결과 판정.
     #   - 타겟 변경(=새 URL의 첫 측정): edge 적어도 'accept'
     #   - 진짜 재측정: edge < MinAcceptedEdges면 'fail-insufficient' (적은 edge로 갱신 안 함)
-    #   - edge 충분 + |delta| <= 임계: 'accept'
+    #   - edge 충분 + |delta| <= KeepExistingThresholdMs: 'keep-existing' (기존값 유지)
+    #   - edge 충분 + |delta| <= DeltaThresholdMs: 'accept'
     #   - edge 충분 + |delta| 초과: 'delta-exceeded' (호출부가 재시도/거부 처리)
     param(
         [Parameter(Mandatory)][bool]$IsTargetChange,
         [Parameter(Mandatory)][int]$AcceptedCount,
         [Parameter(Mandatory)][double]$DeltaMs,
         [int]$MinAcceptedEdges = 5,
+        [double]$KeepExistingThresholdMs = 30,
         [double]$DeltaThresholdMs = 100
     )
     if ($IsTargetChange) { return 'accept' }
     if ($AcceptedCount -lt $MinAcceptedEdges) { return 'fail-insufficient' }
+    if ($DeltaMs -le $KeepExistingThresholdMs) { return 'keep-existing' }
     if ($DeltaMs -le $DeltaThresholdMs) { return 'accept' }
     return 'delta-exceeded'
 }

@@ -180,7 +180,10 @@ Describe 'Get-RemeasureAttemptDecision' {
     It 'accepts target change regardless of edge count' {
         Get-RemeasureAttemptDecision -IsTargetChange $true -AcceptedCount 1 -DeltaMs 9999 | Should Be 'accept'
     }
-    It 'accepts genuine remeasure with enough edges and small delta' {
+    It 'keeps existing genuine remeasure with enough edges and very small delta' {
+        Get-RemeasureAttemptDecision -IsTargetChange $false -AcceptedCount 6 -DeltaMs 30 | Should Be 'keep-existing'
+    }
+    It 'accepts genuine remeasure with enough edges and moderate delta' {
         Get-RemeasureAttemptDecision -IsTargetChange $false -AcceptedCount 6 -DeltaMs 50 | Should Be 'accept'
     }
     It 'fails genuine remeasure with too few edges even if delta small' {

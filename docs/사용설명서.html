@@ -128,7 +128,7 @@
     <ol>
       <li>브라우저 상단 입력창에 측정하고 싶은 URL을 넣는다. 예: <code>https://ticket.interpark.com/</code></li>
       <li><code>측정</code> 버튼 클릭.</li>
-      <li><strong>약 6~15초</strong> 대기. 화면에 "초기 측정 중... (약 6초)" 표시.</li>
+      <li><strong>최대 20초</strong> 대기. 화면에 "초기 측정 중... (20초 이내)" 표시.</li>
       <li>완료되면 시계가 동작 시작.</li>
     </ol>
 
@@ -159,8 +159,9 @@
       <tbody>
         <tr><td><code>측정할 URL을 입력하세요</code></td><td>idle. URL 미입력.</td></tr>
         <tr><td><code>측정 대기 중...</code></td><td>queued. 곧 측정 시작.</td></tr>
-        <tr><td><code>초기 측정 중... (약 6초)</code></td><td>첫 측정 진행.</td></tr>
-        <tr><td><code>재측정 중... (약 6초)</code></td><td>F5 새로고침으로 재측정 진행.</td></tr>
+        <tr><td><code>초기 측정 중... (20초 이내)</code></td><td>측정 버튼으로 새 측정 진행.</td></tr>
+        <tr><td><code>재측정 중... (15초 이내)</code></td><td>F5 새로고침으로 재측정 진행.</td></tr>
+        <tr><td><code>재측정 차이 Nms: 기존값 유지</code></td><td>기존 측정과 30ms 이하 차이라 미세 흔들림을 반영하지 않음.</td></tr>
         <tr><td><code>재측정 완료 (2회차 반영)</code></td><td>1회차 편차 컸지만 2회차에서 안정.</td></tr>
         <tr><td><code>재측정 편차 Nms 초과: 기존값 유지</code></td><td>2회 시도 모두 100ms 넘게 튀어 기존값 유지.</td></tr>
         <tr><td><code>측정 실패</code></td><td>대상 서버가 Date 헤더를 안 주거나 5초 timeout.</td></tr>
