@@ -137,6 +137,11 @@ $measureSubscription = Register-ObjectEvent `
                 }
             }
 
+            if ($lastResult) {
+                $s.LastSamples = $lastResult.Samples
+                $s.LastEdges = $lastResult.Edges
+            }
+
             if ($accepted) {
                 $s.OffsetMs      = $lastResult.OffsetMs
                 $s.RttMedianMs   = $lastResult.RttMedianMs
@@ -146,8 +151,6 @@ $measureSubscription = Register-ObjectEvent `
                 $s.AcceptedCount = $lastResult.AcceptedCount
                 $s.Method        = $lastResult.Method
                 $s.IntersectWidthMs = $lastResult.IntersectWidthMs
-                $s.LastSamples   = $lastResult.Samples
-                $s.LastEdges     = $lastResult.Edges
                 $s.LastMeasureAt = Get-PcUtcNow
                 $s.LastRemeasureResult = 'accepted'
                 $s.PendingTargetChange = $false

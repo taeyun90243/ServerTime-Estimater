@@ -5,3 +5,23 @@ __pycache__/
 tools/build-artifacts/
 .vscode/
 .idea/
+
+# Crash dumps
+*.stackdump
+*.dmp
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+*.swp
+*.swo
+
+# Temp files
+*.tmp
+*.temp
+
+# Local env/secrets
+.env
+.env.*

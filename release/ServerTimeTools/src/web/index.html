@@ -12,7 +12,10 @@
              autocomplete="url" placeholder="예: https://www.example.com/">
       <button type="submit">측정</button>
     </form>
-    <div class="notice">재측정은 F5로. 재측정은 시간이 오래 걸릴 수 있으니 주의.</div>
+    <div class="measure-actions">
+      <button class="remeasure-button" id="remeasure-button" type="button" disabled>재측정</button>
+      <span class="duration-hint" id="duration-hint">초기 측정: 예상 약 6초, 최대 20초</span>
+    </div>
     <div class="clock-face">
       <svg viewBox="0 0 200 200" width="360" height="360">
         <circle class="track" cx="100" cy="100" r="92"/>

@@ -161,6 +161,14 @@
       const data = await res.json();
       const t1 = performance.now();
       const lag = (t1 - t0) / 2;
+      // /api/state는 같은 PC의 로컬 서버라 정상 왕복은 수 ms다.
+      // 그러나 측정 중에는 단일 스레드 PowerShell HTTP 서버가 측정 루프에 막혀,
+      // 진행 중이던 /api/state가 측정이 끝날 때(~10초)까지 반환되지 않는다.
+      // 그러면 (t1-t0)/2가 ~5000ms로 튀고, serverAtFetch가 +5초 미래로 계산되어
+      // hasLargeDisplayDrift가 켜지면 기존값 유지(measureAt 불변) 재측정인데도
+      // 기준점이 +5초로 갱신됐다가 다음 정상 폴에서 되돌아온다(=순간 흔들림).
+      // 비정상적으로 큰 lag는 신뢰할 수 없으므로 이 응답으로는 기준점을 갱신하지 않는다.
+      const lagTrustworthy = lag <= 300;
 
       const nextTargetUrl = data.targetUrl || '';
       const nextMeasurementUrl = data.measurementUrl || '';
@@ -191,14 +199,15 @@
       const hasNewAppliedMeasure = !!measureAt && measureAt !== appliedMeasureAt;
       const serverAtFetch = hasOffsetData ? data.pcSendTimeAtMs + data.offsetMs + lag : null;
       const currentEstimate = nowEstimateMs();
-      const hasLargeDisplayDrift = (data.status === 'ok' || data.status === 'stale') &&
+      const hasLargeDisplayDrift = lagTrustworthy &&
+                                   (data.status === 'ok' || data.status === 'stale') &&
                                    serverAtFetch != null &&
                                    currentEstimate != null &&
                                    Math.abs(serverAtFetch - currentEstimate) > 500;
       const shouldUpdateBase = ((data.status === 'ok' || data.status === 'stale') && hasNewAppliedMeasure) ||
                                hasLargeDisplayDrift ||
                                (baseServerMs == null && hasOffsetData && measureAt);
-      if (shouldUpdateBase && hasOffsetData) {
+      if (shouldUpdateBase && hasOffsetData && lagTrustworthy) {
         setClockBase(serverAtFetch, t1);
         appliedMeasureAt = measureAt;
       }

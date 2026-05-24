@@ -34,38 +34,19 @@
   let slewRemainingMs = 0;
   let lastRenderPerfMs = null;
   let localReloadRemeasure = false;
-  let reloadNoticeUntilMs = 0;
   let activeTargetUrl = null;
+  let appliedMeasureAt = null;
 
   const targetForm = document.getElementById('target-form');
   const targetInput = document.getElementById('target-url');
-
-  try {
-    const nav = performance.getEntriesByType('navigation')[0];
-    const legacyReload = performance.navigation && performance.navigation.type === 1;
-    const pendingReload = sessionStorage.getItem('server-clock-refresh') === '1';
-    sessionStorage.removeItem('server-clock-refresh');
-    localReloadRemeasure = pendingReload || (!!nav && nav.type === 'reload') || legacyReload;
-  } catch (e) {
-    localReloadRemeasure = false;
-  }
-
-  window.addEventListener('beforeunload', function() {
-    try {
-      sessionStorage.setItem('server-clock-refresh', '1');
-    } catch (e) {}
-  });
+  const remeasureButton = document.getElementById('remeasure-button');
+  const durationHint = document.getElementById('duration-hint');
 
   function setStatusText(text, warn, prominent) {
     const st = document.getElementById('status');
     st.classList.toggle('warn', !!warn);
     st.classList.toggle('prominent', !!prominent);
     st.textContent = text;
-  }
-
-  if (localReloadRemeasure) {
-    reloadNoticeUntilMs = performance.now() + 4000;
-    setStatusText('새로고침중... 재측정 요청됨', false, true);
   }
 
   function setClockBase(serverMs, perfMs) {
@@ -94,11 +75,14 @@
     basePerfMs = null;
     slewRemainingMs = 0;
     lastRenderPerfMs = null;
+    appliedMeasureAt = null;
   }
 
   async function submitTarget(url) {
     const button = targetForm.querySelector('button');
     button.disabled = true;
+    remeasureButton.disabled = true;
+    setDurationHint('초기 측정: 예상 약 6초, 최대 20초');
     setStatusText('측정 요청 중...', false, true);
     try {
       const res = await fetch('/api/target', {
@@ -119,6 +103,7 @@
       setStatusText(e.message || 'URL 설정 실패', true, true);
     } finally {
       button.disabled = false;
+      updateControls();
     }
   }
 
@@ -127,6 +112,44 @@
     submitTarget(targetInput.value);
   });
 
+  async function requestRemeasure() {
+    if (!state || !state.lastMeasureAt || state.status === 'measuring' || state.status === 'queued') return;
+    remeasureButton.disabled = true;
+    setDurationHint('재측정: 1회 약 6초, 최대 15초');
+    setStatusText('재측정 요청 중...', false, true);
+    try {
+      const res = await fetch('/api/remeasure', { method: 'POST', cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || '재측정 요청 실패');
+      await fetchState();
+    } catch (e) {
+      setStatusText(e.message || '재측정 요청 실패', true, true);
+    } finally {
+      updateControls();
+    }
+  }
+
+  remeasureButton.addEventListener('click', requestRemeasure);
+
+  function setDurationHint(text) {
+    durationHint.textContent = text;
+  }
+
+  function updateControls() {
+    const isBusy = !!state && (state.status === 'measuring' || state.status === 'queued');
+    const hasMeasuredTarget = !!state && !!state.targetUrl && !!state.lastMeasureAt;
+    remeasureButton.disabled = isBusy || !hasMeasuredTarget;
+
+    if (isBusy) {
+      const isRemeasure = hasPendingRemeasure() || localReloadRemeasure;
+      setDurationHint(isRemeasure ? '재측정: 1회 약 6초, 최대 15초' : '초기 측정: 예상 약 6초, 최대 20초');
+    } else if (hasMeasuredTarget) {
+      setDurationHint('재측정: 1회 약 6초, 최대 15초');
+    } else {
+      setDurationHint('초기 측정: 예상 약 6초, 최대 20초');
+    }
+  }
+
   async function fetchState() {
     try {
       const t0 = performance.now();
@@ -134,6 +157,14 @@
       const data = await res.json();
       const t1 = performance.now();
       const lag = (t1 - t0) / 2;
+      // /api/state는 같은 PC의 로컬 서버라 정상 왕복은 수 ms다.
+      // 그러나 측정 중에는 단일 스레드 PowerShell HTTP 서버가 측정 루프에 막혀,
+      // 진행 중이던 /api/state가 측정이 끝날 때(~10초)까지 반환되지 않는다.
+      // 그러면 (t1-t0)/2가 ~5000ms로 튀고, 그 lag가 setClockBase에 더해지면
+      // 시계가 +5초 점프했다가 다음 정상 폴에서 되돌아온다(=재측정 시 순간 흔들림).
+      // 비정상적으로 큰 lag는 신뢰할 수 없으므로 이 응답으로는 기준점을 갱신하지 않는다.
+      // 시계는 현재 기준으로 계속 흐르고, 정상 지연이 회복된 다음 폴에서 깔끔히 반영된다.
+      const lagTrustworthy = lag <= 300;
 
       const nextTargetUrl = data.targetUrl || '';
       if (activeTargetUrl === null) {
@@ -144,24 +175,29 @@
         targetInput.value = activeTargetUrl;
         resetClockBase();
       }
-      // 측정 완료 상태는 항상 갱신.
-      // 측정 중에는 갱신 안 함 (response latency 변동이 초침 점프로 보임).
+      // 시계 기준점은 최초 표시 또는 실제 반영된 측정(lastMeasureAt 변경) 때만 갱신.
+      // ok 응답마다 재기준화하면 response latency 변동이 초침 점프로 보이고,
+      // kept-small-delta/rejected처럼 "기존값 유지"인 재측정도 순간 변화처럼 보인다.
       // 단, baseServerMs가 아직 없는 경우 (F5 직후 등) F5 재측정 동안에도
       // 이전 offsetMs로 일단 시계를 띄워둠. 재측정 끝나면 ok 상태에서 갱신.
       const hasOffsetData = typeof data.offsetMs === 'number' && typeof data.pcSendTimeAtMs === 'number';
-      const shouldUpdateBase = (data.status === 'ok' || data.status === 'stale') ||
-                               (baseServerMs == null && hasOffsetData && data.lastMeasureAt);
-      if (shouldUpdateBase && hasOffsetData) {
+      const measureAt = data.lastMeasureAt || null;
+      const hasNewAppliedMeasure = !!measureAt && measureAt !== appliedMeasureAt;
+      const shouldUpdateBase = ((data.status === 'ok' || data.status === 'stale') && hasNewAppliedMeasure) ||
+                               (baseServerMs == null && hasOffsetData && measureAt);
+      if (shouldUpdateBase && hasOffsetData && lagTrustworthy) {
         const serverAtSend = data.pcSendTimeAtMs + data.offsetMs;
         setClockBase(serverAtSend + lag, t1);
+        appliedMeasureAt = measureAt;
       }
       state = data;
+      updateControls();
       if (data.lastMeasureRequestedAt && data.lastMeasureAt &&
           new Date(data.lastMeasureAt).getTime() >= new Date(data.lastMeasureRequestedAt).getTime()) {
-        if (performance.now() >= reloadNoticeUntilMs) localReloadRemeasure = false;
+        localReloadRemeasure = false;
       } else if (data.lastMeasureRequestedAt && data.lastRemeasureFinishedAt &&
           new Date(data.lastRemeasureFinishedAt).getTime() >= new Date(data.lastMeasureRequestedAt).getTime()) {
-        if (performance.now() >= reloadNoticeUntilMs) localReloadRemeasure = false;
+        localReloadRemeasure = false;
       }
     } catch (e) {
       console.warn('fetchState failed', e);
@@ -334,6 +370,7 @@
   let detailsOpen = false;
   let lastSamplesData = null;
   let lastRenderedAt = null;
+  let lastRenderedRemeasureAt = null;
 
   detailsToggle.addEventListener('click', async function() {
     detailsOpen = !detailsOpen;
@@ -512,10 +549,14 @@
   fetchState();
   setInterval(fetchState, 1000);
   setInterval(function() {
-    // 측정 새로 끝났으면 details 자동 갱신
+    // 측정 또는 재측정이 새로 끝났으면 details 자동 갱신.
+    // 기존값 유지 재측정은 lastMeasureAt이 바뀌지 않으므로 finishedAt도 본다.
     if (!detailsOpen || !state) return;
-    if (state.lastMeasureAt && state.lastMeasureAt !== lastRenderedAt) {
+    const measureChanged = state.lastMeasureAt && state.lastMeasureAt !== lastRenderedAt;
+    const remeasureChanged = state.lastRemeasureFinishedAt && state.lastRemeasureFinishedAt !== lastRenderedRemeasureAt;
+    if (measureChanged || remeasureChanged) {
       lastRenderedAt = state.lastMeasureAt;
+      lastRenderedRemeasureAt = state.lastRemeasureFinishedAt;
       refreshDetails();
     }
   }, 1500);
