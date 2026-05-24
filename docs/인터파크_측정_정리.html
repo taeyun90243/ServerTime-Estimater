@@ -82,7 +82,7 @@ Date가 측정 윈도우 내내 멈춤 + Age&gt;0
       <li><code>targetUrl</code>, <code>measurementUrl</code>, <code>lastMeasureRequestedAt</code> 변경 시 기존 <code>baseServerMs</code> 리셋</li>
       <li>같은 <code>lastMeasureAt</code>이라도 화면 추정치와 <code>/api/state</code> 기준 시각이 500ms 이상 다르면 강제 재기준화</li>
       <li>재측정 버튼을 누르면 즉시 기존 UI 기준점 리셋</li>
-      <li>수동 재측정은 delta 보호 로직으로 새 값을 버리지 않고 명시적 새 측정으로 반영</li>
+      <li>수동 재측정은 같은 canonical target이면 delta 보호 로직을 적용</li>
     </ul>
   </section>
 
@@ -93,7 +93,7 @@ Date가 측정 윈도우 내내 멈춤 + Age&gt;0
       <tbody>
         <tr><td><code>nol.interpark.com</code> 입력 후 측정</td><td>입력창/상태가 <code>https://nol.interpark.com/ticket</code> 기준으로 바뀌고 새 <code>?t=...</code> 경로를 측정한다.</td></tr>
         <tr><td>재측정 버튼 클릭</td><td>UI는 <code>재측정 중...</code>으로 표시하고, 새 <code>measurementUrl</code>로 샘플링한다.</td></tr>
-        <tr><td>재측정 성공</td><td>기존 값과 차이가 커도 수동 요청이므로 새 offset을 반영한다.</td></tr>
+        <tr><td>재측정 성공</td><td>같은 <code>targetUrl</code>이면 30ms 이하는 기존 유지, 31~100ms는 새 offset 반영, 100ms 초과는 1회 재시도 후 기존 유지.</td></tr>
         <tr><td>재측정 실패</td><td>기존 offset은 유지하고 <code>lastError</code>에 실패 사유를 남긴다.</td></tr>
         <tr><td>F5 없이 기다림</td><td>1초 폴링 중 화면 기준과 서버 state가 500ms 이상 다르면 자동으로 재동기화한다.</td></tr>
       </tbody>

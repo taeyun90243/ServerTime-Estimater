@@ -1,4 +1,5 @@
 . "$PSScriptRoot\..\src\http-server.ps1"
+. "$PSScriptRoot\..\src\measurement.ps1"
 
 Describe 'HTTP server URL helpers' {
     It 'Normalize-TargetUrl adds https scheme when omitted' {
@@ -72,5 +73,49 @@ Describe 'HTTP server target state' {
         $state.RttMedianMs | Should Be 0.0
         $state.Host | Should Be 'www.naver.com'
         $state.Status | Should Be 'queued'
+    }
+
+    It 'keeps same-target remeasure on the delta-guard path' {
+        $state = New-StateStore
+        $state.TargetUrl = 'https://example.com/'
+        $state.Host = 'example.com'
+        $state.LastMeasureAt = [DateTime]::new(2026,5,2,8,0,0,[DateTimeKind]::Utc)
+        $state.MeasureTimer = New-Object Timers.Timer
+        $stream = New-Object IO.MemoryStream
+        $resp = [PSCustomObject]@{
+            StatusCode = 200
+            ContentType = ''
+            ContentLength64 = 0
+            OutputStream = $stream
+        }
+
+        Start-RemeasureFromRequest -resp $resp -state $state
+
+        $state.PendingTargetChange | Should Be $false
+        $state.LastMeasureAt | Should Not Be $null
+        $state.Status | Should Be 'queued'
+    }
+
+    It 'treats Interpark cache-busted remeasure as the same target' {
+        $state = New-StateStore
+        $state.TargetUrl = 'https://nol.interpark.com/ticket'
+        $state.MeasurementUrl = 'https://nol.interpark.com/ticket?t=old'
+        $state.Host = 'nol.interpark.com'
+        $state.LastMeasureAt = [DateTime]::new(2026,5,2,8,0,0,[DateTimeKind]::Utc)
+        $state.MeasureTimer = New-Object Timers.Timer
+        $stream = New-Object IO.MemoryStream
+        $resp = [PSCustomObject]@{
+            StatusCode = 200
+            ContentType = ''
+            ContentLength64 = 0
+            OutputStream = $stream
+        }
+
+        Start-RemeasureFromRequest -resp $resp -state $state
+
+        $state.PendingTargetChange | Should Be $false
+        $state.TargetUrl | Should Be 'https://nol.interpark.com/ticket'
+        $state.MeasurementUrl | Should Match '^https://nol\.interpark\.com/ticket\?t='
+        $state.MeasurementUrl | Should Not Be 'https://nol.interpark.com/ticket?t=old'
     }
 }

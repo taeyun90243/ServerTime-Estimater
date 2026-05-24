@@ -139,9 +139,7 @@ function Start-RemeasureFromRequest {
     $state.LastRemeasureResult = ''
     $state.LastRemeasureDeltaMs = $null
     $state.LastRemeasureAttempts = 0
-    # Manual remeasure is an explicit user request. Accept the new measurement
-    # instead of protecting a possibly bad existing offset with delta rejection.
-    $state.PendingTargetChange = $true
+    $previousTargetUrl = $state.TargetUrl
     if (Get-Command Resolve-MeasurementTarget -ErrorAction SilentlyContinue) {
         $measurementTarget = Resolve-MeasurementTarget -Url $state.TargetUrl
         $state.TargetUrl = $measurementTarget.TargetUrl
@@ -149,6 +147,11 @@ function Start-RemeasureFromRequest {
         $state.MeasurementUrl = $measurementTarget.MeasurementUrl
         $state.MeasurementNote = $measurementTarget.MeasurementNote
     }
+    # A remeasure of the same canonical target must still go through the
+    # existing delta guard: <=30ms keep existing, <=100ms accept, >100ms retry.
+    # Some sites (Interpark) get a fresh cache-busted MeasurementUrl every time,
+    # but that is not a target change.
+    $state.PendingTargetChange = ($previousTargetUrl -ne $state.TargetUrl)
     $state.MeasureInProgress = $false
     $state.Status = 'queued'
     Write-LogEvent @{ ev = 'remeasure_requested'; source = 'button'; host = $state.Host }
