@@ -22,6 +22,12 @@ Describe 'Sample reduction algorithm' {
     It 'Get-Median returns middle value for odd count' {
         Get-Median @(1,3,5,7,9) | Should Be 5
     }
+    It 'Get-Median returns true middle for n=3 (banker rounding regression)' {
+        Get-Median @(125,325,525) | Should Be 325
+    }
+    It 'Get-Median returns true middle for n=7' {
+        Get-Median @(10,20,30,40,50,60,70) | Should Be 40
+    }
     It 'Get-Median averages two middle for even count' {
         Get-Median @(1,2,3,4) | Should Be 2.5
     }
@@ -73,7 +79,117 @@ Describe 'Sample reduction algorithm' {
             }
         }
         $r = Reduce-Samples -Samples $samples
-        $r.Method | Should Be 'edge'
-        [Math]::Abs($r.OffsetMs - $trueOffsetMs) | Should BeLessThan 60
+        $r.Method | Should Be 'edge-intersect'
+        [Math]::Abs($r.OffsetMs - $trueOffsetMs) | Should BeLessThan 30
+    }
+}
+
+Describe 'Get-EdgeDetails per-edge offset bounds' {
+    It 'returns LowerMs = S - R, UpperMs = S - L, OffsetMs = midpoint' {
+        # prev: serverEvent PC = 4600 - 45 = 4555, Date 4000
+        # curr: serverEvent PC = 4740 - 45 = 4695, Date 5000
+        $samples = @(
+            [PSCustomObject]@{ RttMs = 90; ServerDateMs = 4000; PcAtT2Ms = 4600 },
+            [PSCustomObject]@{ RttMs = 90; ServerDateMs = 5000; PcAtT2Ms = 4740 }
+        )
+        $edges = Get-EdgeDetails -Samples $samples
+        @($edges).Count | Should Be 1
+        $e = @($edges)[0]
+        $e.LowerMs  | Should Be 305   # 5000 - 4695
+        $e.UpperMs  | Should Be 445   # 5000 - 4555
+        $e.OffsetMs | Should Be 375   # 5000 - 4625
+    }
+}
+
+Describe 'Get-HybridOffsetEstimate' {
+    # 교집합 = 균등노이즈 MLE. 1초 격자 제약을 써서 1/n로 수렴.
+    It 'intersects all consistent edges and returns midpoint of the feasible region' {
+        $edges = @(
+            [PSCustomObject]@{ LowerMs = 305; UpperMs = 445; OffsetMs = 375 },
+            [PSCustomObject]@{ LowerMs = 185; UpperMs = 325; OffsetMs = 255 },
+            [PSCustomObject]@{ LowerMs = 205; UpperMs = 345; OffsetMs = 275 }
+        )
+        $r = Get-HybridOffsetEstimate -Edges $edges
+        $r.Method    | Should Be 'edge-intersect'
+        $r.UsedCount | Should Be 3
+        $r.OffsetMs  | Should Be 315   # ([305..325] 교집합 중점)
+        $r.WidthMs   | Should Be 20
+    }
+
+    It 'drops an inconsistent outlier edge and flags robust intersection' {
+        $edges = @(
+            [PSCustomObject]@{ LowerMs = 305; UpperMs = 445; OffsetMs = 375 },
+            [PSCustomObject]@{ LowerMs = 185; UpperMs = 325; OffsetMs = 255 },
+            [PSCustomObject]@{ LowerMs = 205; UpperMs = 345; OffsetMs = 275 },
+            [PSCustomObject]@{ LowerMs = 600; UpperMs = 740; OffsetMs = 670 }  # outlier
+        )
+        $r = Get-HybridOffsetEstimate -Edges $edges
+        $r.Method    | Should Be 'edge-intersect-robust'
+        $r.UsedCount | Should Be 3
+        $r.OffsetMs  | Should Be 315
+    }
+
+    It 'falls back to median of midpoints when no two edges overlap' {
+        $edges = @(
+            [PSCustomObject]@{ LowerMs = 100; UpperMs = 150; OffsetMs = 125 },
+            [PSCustomObject]@{ LowerMs = 300; UpperMs = 350; OffsetMs = 325 },
+            [PSCustomObject]@{ LowerMs = 500; UpperMs = 550; OffsetMs = 525 }
+        )
+        $r = Get-HybridOffsetEstimate -Edges $edges
+        $r.Method   | Should Be 'edge-median'
+        $r.OffsetMs | Should Be 325   # median(125,325,525)
+    }
+
+    It 'handles a single edge as its midpoint' {
+        $edges = @(
+            [PSCustomObject]@{ LowerMs = 200; UpperMs = 340; OffsetMs = 270 }
+        )
+        $r = Get-HybridOffsetEstimate -Edges $edges
+        $r.Method    | Should Be 'edge-intersect'
+        $r.UsedCount | Should Be 1
+        $r.OffsetMs  | Should Be 270
+    }
+}
+
+Describe 'Get-RttThreshold' {
+    It 'computes rttMedian * 1.5 + 2' {
+        Get-RttThreshold -RttMedianMs 100 | Should Be 152
+    }
+    It 'handles zero median' {
+        Get-RttThreshold -RttMedianMs 0 | Should Be 2
+    }
+}
+
+Describe 'Test-ShouldExtendWindow' {
+    It 'extends when edge-based and below MinEdgeCount' {
+        Test-ShouldExtendWindow -Method 'edge-intersect' -AcceptedCount 3 -MinEdgeCount 8 | Should Be $true
+    }
+    It 'stops when edge count reached' {
+        Test-ShouldExtendWindow -Method 'edge-intersect' -AcceptedCount 8 -MinEdgeCount 8 | Should Be $false
+    }
+    It 'does not extend for non-edge method (upper-envelope)' {
+        Test-ShouldExtendWindow -Method 'upper-envelope' -AcceptedCount 1 -MinEdgeCount 8 | Should Be $false
+    }
+    It 'extends for edge-median when below count' {
+        Test-ShouldExtendWindow -Method 'edge-median' -AcceptedCount 2 -MinEdgeCount 8 | Should Be $true
+    }
+}
+
+Describe 'Get-RemeasureAttemptDecision' {
+    # 재측정 수용 판정. 첫 측정/타겟변경은 edge 적어도 수용, 진짜 재측정만 edge>=5 요구.
+    It 'accepts target change regardless of edge count' {
+        Get-RemeasureAttemptDecision -IsTargetChange $true -AcceptedCount 1 -DeltaMs 9999 | Should Be 'accept'
+    }
+    It 'accepts genuine remeasure with enough edges and small delta' {
+        Get-RemeasureAttemptDecision -IsTargetChange $false -AcceptedCount 6 -DeltaMs 50 | Should Be 'accept'
+    }
+    It 'fails genuine remeasure with too few edges even if delta small' {
+        Get-RemeasureAttemptDecision -IsTargetChange $false -AcceptedCount 4 -DeltaMs 10 | Should Be 'fail-insufficient'
+    }
+    It 'flags delta-exceeded with enough edges but large delta' {
+        Get-RemeasureAttemptDecision -IsTargetChange $false -AcceptedCount 6 -DeltaMs 500 | Should Be 'delta-exceeded'
+    }
+    It 'accepts at exact boundary (5 edges, 100ms delta)' {
+        Get-RemeasureAttemptDecision -IsTargetChange $false -AcceptedCount 5 -DeltaMs 100 | Should Be 'accept'
     }
 }

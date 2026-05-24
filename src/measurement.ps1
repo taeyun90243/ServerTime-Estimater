@@ -194,8 +194,11 @@ function Get-Median {
     $sorted = $Values | Sort-Object
     $n = $sorted.Count
     if ($n -eq 0) { throw 'Empty array' }
-    if ($n % 2 -eq 1) { return [double]$sorted[[int]($n/2)] }
-    return ([double]$sorted[$n/2 - 1] + [double]$sorted[$n/2]) / 2.0
+    # [int]($n/2)는 [int]1.5 -> 2 (은행가 반올림)라 홀수 n에서 가운데를 빗나간다.
+    # floor로 정확히 가운데 인덱스를 구한다.
+    $mid = [int][Math]::Floor($n / 2)
+    if ($n % 2 -eq 1) { return [double]$sorted[$mid] }
+    return ([double]$sorted[$mid - 1] + [double]$sorted[$mid]) / 2.0
 }
 
 function Get-StdDev {
@@ -218,6 +221,42 @@ function Get-Ci95Ms {
     return $tValue * $sigma / [Math]::Sqrt($n)
 }
 
+function Get-RttThreshold {
+    # RTT 필터 임계값. 이보다 큰 RTT 샘플/edge는 σ 폭주로 채택 제외.
+    param([Parameter(Mandatory)][double]$RttMedianMs)
+    return $RttMedianMs * 1.5 + 2
+}
+
+function Test-ShouldExtendWindow {
+    # 윈도우 연장 여부: edge 계열(edge-intersect/-robust/-median)이고 edge가 부족할 때만.
+    # upper-envelope(edge 미검출)는 더 샘플링해도 Date 전환이 안 보일 수 있어 연장 안 함.
+    param(
+        [Parameter(Mandatory)][string]$Method,
+        [Parameter(Mandatory)][int]$AcceptedCount,
+        [Parameter(Mandatory)][int]$MinEdgeCount
+    )
+    return ($Method -like 'edge*') -and ($AcceptedCount -lt $MinEdgeCount)
+}
+
+function Get-RemeasureAttemptDecision {
+    # 재측정 1회 결과 판정.
+    #   - 타겟 변경(=새 URL의 첫 측정): edge 적어도 'accept'
+    #   - 진짜 재측정: edge < MinAcceptedEdges면 'fail-insufficient' (적은 edge로 갱신 안 함)
+    #   - edge 충분 + |delta| <= 임계: 'accept'
+    #   - edge 충분 + |delta| 초과: 'delta-exceeded' (호출부가 재시도/거부 처리)
+    param(
+        [Parameter(Mandatory)][bool]$IsTargetChange,
+        [Parameter(Mandatory)][int]$AcceptedCount,
+        [Parameter(Mandatory)][double]$DeltaMs,
+        [int]$MinAcceptedEdges = 5,
+        [double]$DeltaThresholdMs = 100
+    )
+    if ($IsTargetChange) { return 'accept' }
+    if ($AcceptedCount -lt $MinAcceptedEdges) { return 'fail-insufficient' }
+    if ($DeltaMs -le $DeltaThresholdMs) { return 'accept' }
+    return 'delta-exceeded'
+}
+
 function Select-LowJitterSamples {
     param(
         [Parameter(Mandatory)]$Samples,
@@ -225,7 +264,7 @@ function Select-LowJitterSamples {
     )
     $rtts = $Samples | ForEach-Object { [double]$_.RttMs }
     $rttMedian = Get-Median -Values $rtts
-    $lowJitter = $Samples | Where-Object { [double]$_.RttMs -le ($rttMedian * 1.5 + 2) }
+    $lowJitter = $Samples | Where-Object { [double]$_.RttMs -le (Get-RttThreshold -RttMedianMs $rttMedian) }
     if ($lowJitter.Count -lt $MinCount) { $lowJitter = $Samples }
     return [PSCustomObject]@{
         Samples     = $lowJitter
@@ -267,11 +306,6 @@ function Select-QuantizedOffsetCandidates {
     return $rawOffsets | Sort-Object -Descending | Select-Object -First $candidateCount
 }
 
-function Select-EdgeOffsetCandidates {
-    param([Parameter(Mandatory)]$Samples)
-    return (Get-EdgeDetails -Samples $Samples) | ForEach-Object { $_.OffsetMs }
-}
-
 function Get-EdgeDetails {
     # GUI 시각화용. 각 edge가 어떤 샘플 쌍 사이에서 검출됐는지 인덱스까지 반환.
     param(
@@ -282,12 +316,12 @@ function Get-EdgeDetails {
     $ordered = @($Samples)
     $edges = New-Object System.Collections.ArrayList
 
-    # RTT 필터: 양 끝 샘플 중 한쪽이라도 RTT median * 1.5 + 2 ms를 넘으면
-    # 해당 edge offset의 σ가 폭주하므로 채택 안 함. Select-LowJitterSamples와 동일 기준.
+    # RTT 필터: 양 끝 샘플 중 한쪽이라도 임계값을 넘으면 해당 edge offset의 σ가
+    # 폭주하므로 채택 안 함. Select-LowJitterSamples와 동일 기준(Get-RttThreshold).
     $rtts = $ordered | ForEach-Object { [double]$_.RttMs }
     if ($rtts.Count -eq 0) { return $edges }
     $rttMedian = Get-Median -Values $rtts
-    $rttThreshold = $rttMedian * 1.5 + 2
+    $rttThreshold = Get-RttThreshold -RttMedianMs $rttMedian
 
     # Gap 필터: 실패한 샘플이 사이에 끼어 wall-clock 간격이 크게 벌어진 경우.
     # 양 끝 RTT가 멀쩡해도 server-event PC 간격이 길면 σ_edge가 폭주.
@@ -311,11 +345,16 @@ function Get-EdgeDetails {
 
         $edgePcMs = ($prevServerEventPcMs + $currServerEventPcMs) / 2.0
         $edgeOffsetMs = [double]$curr.ServerDateMs - $edgePcMs
+        # 1초 격자 제약을 위한 θ 구간: θ ∈ (S - R, S - L).
+        # L = prev 서버이벤트 PC시각(작음), R = curr(큼) → Lower = S - R, Upper = S - L.
+        # OffsetMs(중점) = (Lower + Upper)/2 로 방법1 추정과 일치.
         [void]$edges.Add([PSCustomObject]@{
             PrevIdx  = $i - 1
             CurrIdx  = $i
             EdgePcMs = $edgePcMs
             OffsetMs = $edgeOffsetMs
+            LowerMs  = [double]$curr.ServerDateMs - $currServerEventPcMs
+            UpperMs  = [double]$curr.ServerDateMs - $prevServerEventPcMs
         })
     }
 
@@ -341,8 +380,83 @@ function ConvertTo-EdgeSummaries {
             currIdx  = [int]$_.CurrIdx
             edgePcMs = [double]$_.EdgePcMs
             offsetMs = [double]$_.OffsetMs
+            lowerMs  = [double]$_.LowerMs
+            upperMs  = [double]$_.UpperMs
         }
     })
+}
+
+function Get-HybridOffsetEstimate {
+    # 각 edge는 θ ∈ [LowerMs, UpperMs] 라는 제약. θ는 측정 내내 상수이므로
+    # 모든 구간을 동시에 만족해야 함 = 교집합. 균등노이즈 가정에서 교집합
+    # 중점이 MLE이고, edge 수 n에 대해 오차가 1/√n(중앙값)이 아니라 1/n로 줄어든다.
+    #
+    # 하이브리드(robustness):
+    #   - 전체 교집합이 비지 않음 → 'edge-intersect' (모든 edge 일치)
+    #   - 일부 outlier만 빼면 일치(최대 겹침 ≥ 2) → 'edge-intersect-robust'
+    #   - 어떤 두 edge도 안 겹침(최대 겹침 = 1) → 'edge-median' (중점들의 median 폴백)
+    param([Parameter(Mandatory)]$Edges)
+
+    $arr = @($Edges)
+    $n = $arr.Count
+    if ($n -eq 0) { throw 'No edges' }
+
+    $midpoints = @($arr | ForEach-Object { [double]$_.OffsetMs })
+    if ($n -eq 1) {
+        return [PSCustomObject]@{
+            OffsetMs  = $midpoints[0]
+            Method    = 'edge-intersect'
+            UsedCount = 1
+            WidthMs   = [double]$arr[0].UpperMs - [double]$arr[0].LowerMs
+        }
+    }
+
+    # 최대 겹침 영역(interval stabbing). n이 작아(≤수십) O(n^2) 스윕으로 충분.
+    # 동률이면 중점이 전체 중점 median에 가장 가까운 영역을 택해 robust하게.
+    $medianMid = Get-Median -Values $midpoints
+    $points = @()
+    foreach ($e in $arr) { $points += [double]$e.LowerMs; $points += [double]$e.UpperMs }
+    $points = @($points | Sort-Object -Unique)
+
+    $bestCount = 0
+    $bestLo = $null
+    $bestHi = $null
+    $bestDist = [double]::MaxValue
+    for ($j = 0; $j -lt $points.Count - 1; $j++) {
+        $mid = ($points[$j] + $points[$j + 1]) / 2.0
+        $containing = @($arr | Where-Object {
+            [double]$_.LowerMs -le $mid -and $mid -le [double]$_.UpperMs
+        })
+        $c = $containing.Count
+        if ($c -eq 0) { continue }
+        $candLo = ($containing | ForEach-Object { [double]$_.LowerMs } | Measure-Object -Maximum).Maximum
+        $candHi = ($containing | ForEach-Object { [double]$_.UpperMs } | Measure-Object -Minimum).Minimum
+        $candDist = [Math]::Abs((($candLo + $candHi) / 2.0) - $medianMid)
+        if ($c -gt $bestCount -or ($c -eq $bestCount -and $candDist -lt $bestDist)) {
+            $bestCount = $c
+            $bestLo = $candLo
+            $bestHi = $candHi
+            $bestDist = $candDist
+        }
+    }
+
+    if ($bestCount -le 1) {
+        # 어떤 두 edge도 겹치지 않음 → 합의 불가. 중점들의 median으로 폴백.
+        return [PSCustomObject]@{
+            OffsetMs  = (Get-Median -Values $midpoints)
+            Method    = 'edge-median'
+            UsedCount = $n
+            WidthMs   = 0.0
+        }
+    }
+
+    $method = if ($bestCount -eq $n) { 'edge-intersect' } else { 'edge-intersect-robust' }
+    return [PSCustomObject]@{
+        OffsetMs  = ($bestLo + $bestHi) / 2.0
+        Method    = $method
+        UsedCount = $bestCount
+        WidthMs   = $bestHi - $bestLo
+    }
 }
 
 function Reduce-Samples {
@@ -350,57 +464,48 @@ function Reduce-Samples {
     # Prefer real Date-header edge detection: when Date jumps N -> N+1, the
     # server second boundary lies between those two server-event estimates.
     $edgeDetails = Get-EdgeDetails -Samples $Samples
-    $method = 'edge'
+    $rttMedian = Get-Median -Values ($Samples | ForEach-Object { [double]$_.RttMs })
+
     if ($edgeDetails.Count -eq 0) {
         # Fallback for pathological/cached Date behavior where no transition is
         # visible in the sample window.
         $candidates = Select-QuantizedOffsetCandidates -Samples $Samples
-        $method = 'upper-envelope'
-    } else {
-        $candidates = @($edgeDetails | ForEach-Object { [double]$_.OffsetMs })
+        return [PSCustomObject]@{
+            OffsetMs       = (Get-Median -Values $candidates)
+            SigmaMs        = (Get-StdDev -Values $candidates)
+            Ci95Ms         = (Get-Ci95Ms -Values $candidates)
+            RttMedianMs    = $rttMedian
+            SampleCount    = $Samples.Count
+            AcceptedCount  = $candidates.Count
+            Method         = 'upper-envelope'
+            Samples        = (ConvertTo-SampleSummaries -Samples $Samples)
+            Edges          = @()
+        }
     }
-    $median = Get-Median -Values $candidates
-    $sigma  = Get-StdDev -Values $candidates
-    $ci95   = Get-Ci95Ms -Values $candidates
-    $rttMedian = Get-Median -Values ($Samples | ForEach-Object { [double]$_.RttMs })
+
+    # 1초 격자 제약을 활용한 교집합 추정(+모순 시 median 폴백).
+    $hybrid = Get-HybridOffsetEstimate -Edges $edgeDetails
+    $midpoints = @($edgeDetails | ForEach-Object { [double]$_.OffsetMs })
+    $sigma = Get-StdDev -Values $midpoints
+    # 교집합 계열은 feasible 영역의 반폭이 θ의 hard bound. median 폴백은 통계적 CI.
+    $ci95 = if ($hybrid.Method -eq 'edge-median') {
+        Get-Ci95Ms -Values $midpoints
+    } else {
+        $hybrid.WidthMs / 2.0
+    }
 
     return [PSCustomObject]@{
-        OffsetMs       = $median
+        OffsetMs       = $hybrid.OffsetMs
         SigmaMs        = $sigma
         Ci95Ms         = $ci95
         RttMedianMs    = $rttMedian
         SampleCount    = $Samples.Count
-        AcceptedCount  = $candidates.Count
-        Method         = $method
+        AcceptedCount  = $hybrid.UsedCount
+        Method         = $hybrid.Method
+        IntersectWidthMs = $hybrid.WidthMs
         Samples        = (ConvertTo-SampleSummaries -Samples $Samples)
         Edges          = (ConvertTo-EdgeSummaries -Edges $edgeDetails)
     }
-}
-
-function Invoke-MultiSample {
-    param(
-        [Parameter(Mandatory)][string]$Url,
-        [int]$Count = 50,
-        [int]$IntervalMs = 100
-    )
-    $samples = New-Object System.Collections.ArrayList
-    $useNaverClockApi = Test-NaverClockUrl -Url $Url
-    for ($i = 0; $i -lt $Count; $i++) {
-        try {
-            $s = if ($useNaverClockApi) { Invoke-NaverTimeProbe } else { Invoke-HeadProbe -Url $Url }
-            [void]$samples.Add($s)
-        } catch {
-            # 개별 실패 허용. 50% 이상 실패 시 상위 함수에서 throw
-        }
-        if ($i -lt $Count - 1) { Start-Sleep -Milliseconds $IntervalMs }
-    }
-    if ($samples.Count -lt [int]($Count * 0.5)) {
-        throw "Too many failed samples: $($samples.Count)/$Count"
-    }
-    if ($useNaverClockApi) {
-        return Reduce-PreciseSamples -Samples $samples -Method 'naver-time-api'
-    }
-    return Reduce-Samples -Samples $samples
 }
 
 function Invoke-AdaptiveMultiSample {
@@ -414,6 +519,10 @@ function Invoke-AdaptiveMultiSample {
     #       측정 윈도우를 통째로 먹는 문제 차단.
     #   (2) 메인 윈도우 종료 시 edge 수가 MinEdgeCount 미만이면 ExtendWindowMs
     #       만큼 추가 샘플링. 통계 신뢰도 확보.
+    #
+    # MaxTotalMs > 0이면 전체 측정의 하드 데드라인. 데드라인 직전(현재 timeout만큼
+    # 여유를 두고)부터 새 요청을 시작하지 않아 in-flight 1건까지 포함해 MaxTotalMs를
+    # 넘지 않는다. 재측정(15초 캡)에서 사용. 0이면 무제한(첫 측정·타겟 변경).
     param(
         [Parameter(Mandatory)][string]$Url,
         [int]$IntervalMs = 50,
@@ -424,13 +533,22 @@ function Invoke-AdaptiveMultiSample {
         [int]$MinEdgeCount = 8,
         [int]$ExtendWindowMs = 3000,
         [int]$MaxExtensions = 3,
-        [int]$DefaultTimeoutSec = 5
+        [int]$DefaultTimeoutSec = 5,
+        [int]$MaxTotalMs = 0
     )
     $samples = New-Object System.Collections.ArrayList
     $useNaverClockApi = Test-NaverClockUrl -Url $Url
+    $deadlineSw = [System.Diagnostics.Stopwatch]::StartNew()
+    # 데드라인 초과 여부. ReserveMs는 곧 시작할 요청의 최대 비용(=timeout)으로,
+    # 그만큼 일찍 멈춰 in-flight 요청까지 포함해 MaxTotalMs를 넘지 않게 한다.
+    $isPastDeadline = {
+        param([double]$ReserveMs)
+        return ($MaxTotalMs -gt 0) -and (($deadlineSw.Elapsed.TotalMilliseconds + $ReserveMs) -ge $MaxTotalMs)
+    }
 
     # RTT 추정 단계: timeout 알 수 없으니 기본값 사용
     for ($i = 0; $i -lt $RttProbeCount; $i++) {
+        if (& $isPastDeadline ($DefaultTimeoutSec * 1000)) { break }
         try {
             $s = if ($useNaverClockApi) { Invoke-NaverTimeProbe -TimeoutSec $DefaultTimeoutSec } else { Invoke-HeadProbe -Url $Url -TimeoutSec $DefaultTimeoutSec }
             [void]$samples.Add($s)
@@ -452,6 +570,7 @@ function Invoke-AdaptiveMultiSample {
     if ($adaptiveTimeoutSec -gt $DefaultTimeoutSec) { $adaptiveTimeoutSec = $DefaultTimeoutSec }
 
     for ($i = $samples.Count; $i -lt $count; $i++) {
+        if (& $isPastDeadline ($adaptiveTimeoutSec * 1000)) { break }
         try {
             $s = if ($useNaverClockApi) { Invoke-NaverTimeProbe -TimeoutSec $adaptiveTimeoutSec } else { Invoke-HeadProbe -Url $Url -TimeoutSec $adaptiveTimeoutSec }
             [void]$samples.Add($s)
@@ -471,13 +590,15 @@ function Invoke-AdaptiveMultiSample {
     # 또는 method가 edge에서 벗어나면 종료.
     $tentative = Reduce-Samples -Samples $samples
     for ($round = 0; $round -lt $MaxExtensions; $round++) {
-        if ($tentative.Method -ne 'edge') { break }
-        if ($tentative.AcceptedCount -ge $MinEdgeCount) { break }
+        # edge 계열이고 edge가 부족할 때만 연장(Test-ShouldExtendWindow).
+        if (-not (Test-ShouldExtendWindow -Method $tentative.Method -AcceptedCount $tentative.AcceptedCount -MinEdgeCount $MinEdgeCount)) { break }
         if ($ExtendWindowMs -le 0) { break }
+        if (& $isPastDeadline ($adaptiveTimeoutSec * 1000)) { break }
 
         $extendCount = [int][Math]::Ceiling($ExtendWindowMs / ($rttMedian + $IntervalMs))
         $extendTarget = $samples.Count + $extendCount
         for ($i = $samples.Count; $i -lt $extendTarget; $i++) {
+            if (& $isPastDeadline ($adaptiveTimeoutSec * 1000)) { break }
             try {
                 $s = Invoke-HeadProbe -Url $Url -TimeoutSec $adaptiveTimeoutSec
                 [void]$samples.Add($s)

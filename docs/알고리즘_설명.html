@@ -41,6 +41,12 @@
   th { background: var(--code-bg); }
   td.num { text-align: right; font-family: 'Consolas', monospace; }
   .formula { background: #fffae6; border: 1px dashed #e5c700; padding: 12px 16px; border-radius: 6px; margin: 12px 0; font-family: 'Consolas', monospace; font-size: 14px; }
+  .m1 { color: #2563eb; font-weight: 600; }
+  .m2 { color: #7c3aed; font-weight: 600; }
+  .win { background: #f0fbf4; }
+  .lose { background: #fdf6f0; }
+  .legend { font-size: 13px; color: var(--gray); margin: 4px 0 0; }
+  .ascii { font-size: 12px; line-height: 1.3; }
 </style>
 </head>
 <body>
@@ -63,6 +69,8 @@
       <li><a href="#interpolate">브라우저 보간</a></li>
       <li><a href="#naver">네이버 특수 경로</a></li>
       <li><a href="#accuracy">정확도 한계</a></li>
+      <li><a href="#compare">방법1(중점 median) vs 방법2(교집합)</a></li>
+      <li><a href="#hybrid">하이브리드와 교집합의 한계</a></li>
     </ol>
   </div>
 
@@ -256,9 +264,9 @@ curr 생성 PC 시각 = curr.pcAtT2 - curr.RTT / 2</pre>
     <p>필터 통과한 edge가 N개면 offset 추정치 N개:</p>
     <pre>candidates = [offset_1, offset_2, ..., offset_N]</pre>
 
-    <h3>8.2 중앙값 채택</h3>
-    <p>평균이 아니라 median. outlier에 강하다.</p>
-    <div class="formula">final_offset = median(candidates)</div>
+    <h3>8.2 최종 오프셋 채택 (기본: 1초 격자 교집합)</h3>
+    <p>현재 기본은 각 edge가 주는 구간 제약 <code>θ ∈ [S−R, S−L]</code>의 <strong>교집합</strong> 중점이다(방법2). 과거의 "중점들의 median"(방법1)은 교집합이 비는 모순 상황의 폴백(<code>edge-median</code>)으로만 쓴다. 평균이 아니라 median/교집합을 쓰는 이유는 outlier 견고성이다. 두 방법의 상세 비교는 아래 <a href="#compare">13~14장</a>을 본다.</p>
+    <div class="formula">기본: final_offset = midpoint( ∩ [S−R, S−L] )&nbsp;&nbsp;|&nbsp;&nbsp;폴백: median(midpoints)</div>
 
     <h3>8.3 신뢰구간 계산</h3>
     <p>95% 신뢰구간 반폭 (ci95) 계산:</p>
@@ -346,8 +354,16 @@ basePerfMs = performance.now()</pre>
     <pre>차이 > 120ms → 즉시 baseServerMs 교체
 차이 ≤ 120ms → slewRemainingMs에 누적, 매 프레임 8% 비율로 반영</pre>
 
-    <h3>10.4 안전 마진</h3>
-    <p>표시 시각은 의도적으로 30ms 과거로 보여준다 (<code>SAFETY_BIAS_MS</code>). 네트워크/처리 지연 마진. 클릭 같은 액션이 늦지 않게 하는 보수적 보정.</p>
+    <h3>10.4 안전 마진 (적응형)</h3>
+    <p>수강신청·티켓팅처럼 "절대 빠르면 안 되는" 용도를 위해 표시 시각을 안전마진만큼 <strong>의도적으로 늦춘다</strong>. 항상 실제보다 느리게 보여 클릭이 서버 기준보다 일찍 나가는 것을 막는다.</p>
+    <div class="formula">표시 시각 = 추정 서버 시각 − 안전마진,&nbsp;&nbsp;안전마진 = max(30ms, RTT × 0.3)</div>
+    <p>왜 고정값이 아니라 RTT 비례인가:</p>
+    <ul>
+      <li>표시를 <em>빠르게</em> 미는 주범은 <strong>RTT 비대칭</strong>이다. 업로드(요청)가 다운로드(응답)보다 느리면 서버이벤트 추정이 실제보다 이르게 잡혀 offset이 커지고 표시가 빨라진다 — 가정용 인터넷에서 흔한 위험한 방향.</li>
+      <li>이 비대칭 위험은 RTT에 대략 비례한다. 그래서 마진도 RTT의 30%로 비례시키고, 빠른 회선에서도 최소 30ms는 둔다. (RTT 90ms→30, 200ms→60, 400ms→120ms)</li>
+      <li>마진은 <a href="#hybrid">14장</a>의 핵심 한계와 짝을 이룬다: 교집합은 비대칭을 <em>못 잡으므로</em>, 잡지 못하는 그 편향을 마진으로 보수적으로 덮는다.</li>
+    </ul>
+    <div class="callout warn"><strong>주의.</strong> 비대칭이 마진보다 크면(예: 업로드 심한 정체) 여전히 빠르게 표시될 수 있다. 마진을 키우면 안전하지만 평소엔 더 느리게 보이는 트레이드오프가 있다.</div>
   </div>
 
   <div class="card" id="naver">
@@ -437,6 +453,70 @@ basePerfMs = performance.now()</pre>
       <li><code>time.is</code>와 시각 비교 (브라우저 dev console에서 둘 다 띄우고 육안)</li>
       <li>같은 PC의 NTP skew(<code>참고: PC 시계 +Nms</code>)와 ci95 같이 보고 정합성 판단</li>
     </ol>
+  </div>
+
+  <div class="card" id="compare">
+    <h2>13. <span class="m1">방법1</span> vs <span class="m2">방법2</span></h2>
+    <p>같은 edge 데이터에서 오프셋을 뽑는 두 방식. <span class="m1">방법1</span>은 edge마다 구간 중점 <code>(S−R + S−L)/2</code>을 점추정하고 그 값들의 <strong>중앙값(median)</strong>을 쓴다. <span class="m2">방법2</span>는 edge를 θ에 대한 구간 제약 <code>θ ∈ [S−R, S−L]</code>으로 보고 <strong>모든 구간의 교집합</strong>을 쓴다.</p>
+
+    <table>
+      <thead><tr><th>항목</th><th class="m1">방법1 — 중점 median</th><th class="m2">방법2 — 교집합(기본)</th></tr></thead>
+      <tbody>
+        <tr><td>1초 격자 제약 사용</td><td class="lose">안 씀(edge를 독립 측정 취급)</td><td class="win">씀(θ는 상수 1개)</td></tr>
+        <tr><td>오차 수렴</td><td class="lose">∝ 1/√n</td><td class="win">∝ 1/n</td></tr>
+        <tr><td>불확실성</td><td>통계적 신뢰구간(산포)</td><td>feasible 영역 반폭(일치 폭)</td></tr>
+        <tr><td>outlier 견딤</td><td class="win">강함(median)</td><td class="lose">순수 교집합은 1개에도 깨짐 → 하이브리드로 보완</td></tr>
+      </tbody>
+    </table>
+
+    <h3>13.1 왜 교집합이 더 좋은가</h3>
+    <p>θ는 측정 내내 상수이고 서버 초 경계는 PC 시간축에서 정확히 1000ms 간격이다. 그래서 n개 edge는 "서로 다른 n개 값"이 아니라 <strong>하나의 θ가 동시에 만족할 n개 제약</strong>이다. 폭 ~140ms 구간이라도 교집합은 훨씬 좁아지고, 균등노이즈에서 이 교집합 중점이 MLE다(독일 탱크 문제). 오차가 median의 <code>1/√n</code>이 아니라 <strong><code>1/n</code></strong>로 준다.</p>
+
+    <h3>13.2 워크드 예제 (진짜 θ=320ms, edge 3개)</h3>
+    <table>
+      <thead><tr><th>edge</th><th>θ 구간 [S−R, S−L]</th><th class="m1">중점</th></tr></thead>
+      <tbody>
+        <tr><td>A</td><td class="num">[305, 445]</td><td class="num">375</td></tr>
+        <tr><td>B</td><td class="num">[185, 325]</td><td class="num">255</td></tr>
+        <tr><td>C</td><td class="num">[205, 345]</td><td class="num">275</td></tr>
+      </tbody>
+    </table>
+    <pre class="ascii">A:                 [305===================445]
+B:   [185=========325]
+C:     [205==========345]
+교집합:            [305-325]  → 중점 315</pre>
+    <div class="formula"><span class="m1">방법1</span> median(375,255,275) = 275 (오차 −45ms)&nbsp;&nbsp;|&nbsp;&nbsp;<span class="m2">방법2</span> 교집합 중점 = 315 (오차 −5ms, 폭 20ms)</div>
+    <p>edge 3개만으로도 오차가 1/9로 줄었다. 폭 140짜리 구간 3개의 교집합이 20으로 붕괴한 것이 핵심이다.</p>
+  </div>
+
+  <div class="card" id="hybrid">
+    <h2>14. 하이브리드와 교집합의 한계</h2>
+    <p>순수 교집합은 edge 하나가 어긋나면 통째로 밀리거나 공집합이 된다. 그래서 최대 겹침(interval stabbing)으로 가장 많은 edge가 공유하는 영역을 찾는 <strong>하이브리드</strong>를 쓴다.</p>
+    <table>
+      <thead><tr><th>상황</th><th>method</th><th>동작</th></tr></thead>
+      <tbody>
+        <tr><td>모든 edge 일치</td><td><code>edge-intersect</code></td><td>전체 교집합 중점</td></tr>
+        <tr><td>일부 outlier 제외 후 일치(겹침 ≥2)</td><td><code>edge-intersect-robust</code></td><td>합의 부분집합 교집합, 나머지 버림</td></tr>
+        <tr><td>어떤 두 edge도 안 겹침</td><td><code>edge-median</code></td><td><span class="m1">방법1</span>(중점 median)로 폴백</td></tr>
+        <tr><td>edge 0개</td><td><code>upper-envelope</code></td><td>raw offset 상한봉투</td></tr>
+      </tbody>
+    </table>
+
+    <h3>14.1 ⚠️ 상호 일치 ≠ 정확</h3>
+    <p>교집합은 <em>랜덤한</em> 불일치(지터·outlier)는 잡지만 <em>공통 편향</em>(RTT 비대칭)에는 눈이 먼다. 비대칭은 모든 edge 구간을 같은 방향으로 평행이동시켜 상호 일치를 유지한 채 집단을 편향시킨다.</p>
+    <div class="callout warn">
+      <strong>몬테카를로(800회) 결과.</strong> 진짜 θ=320ms 기준:
+      <table>
+        <thead><tr><th>시나리오</th><th>edge-intersect 비율</th><th>평균 오차</th><th>coverage(보고 ± 안에 진짜 θ)</th></tr></thead>
+        <tbody>
+          <tr><td>비대칭 0 (RTT 지터만)</td><td class="num">800/800</td><td class="num">~10ms</td><td class="num win">100%</td></tr>
+          <tr><td>비대칭 +40ms</td><td class="num">800/800</td><td class="num">~40ms</td><td class="num lose">2%</td></tr>
+          <tr><td>비대칭 +80ms</td><td class="num">800/800</td><td class="num">~79ms</td><td class="num lose">0.4%</td></tr>
+        </tbody>
+      </table>
+      비대칭이 있어도 <code>edge-intersect</code>는 똑같이 100% 뜨면서 진짜 θ가 보고 ± 밖에 거의 항상 있다. 그래서 UI는 ✓ 같은 "성공" 표시를 쓰지 않고 "상호 일치(정확도 보장 아님)"로 적고, 안전마진을 <code>max(30, RTT×0.3)</code>로 키워 비대칭 위험에 비례시킨다.
+    </div>
+    <p>즉 교집합은 방법1보다 정확하고 모순 진단까지 주지만, RTT 비대칭이라는 공통 편향은 두 방법 다 못 잡는 공통 한계다(외부 단방향 HTTP만으로는 관측 불가).</p>
   </div>
 
 </div>

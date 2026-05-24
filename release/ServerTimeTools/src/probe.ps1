@@ -32,6 +32,12 @@ if ($url) {
         $state.RttMedianMs   = $result.RttMedianMs
         $state.SigmaMs       = $result.SigmaMs
         $state.Ci95Ms        = $result.Ci95Ms
+        $state.SampleCount   = $result.SampleCount
+        $state.AcceptedCount = $result.AcceptedCount
+        $state.Method        = $result.Method
+        $state.IntersectWidthMs = $result.IntersectWidthMs
+        $state.LastSamples   = $result.Samples
+        $state.LastEdges     = $result.Edges
         $state.LastMeasureAt = Get-PcUtcNow
         $state.Status        = 'ok'
         Write-Host "초기 오프셋: $([Math]::Round($result.OffsetMs,1)) ms (±$([Math]::Round($result.Ci95Ms,1)))"
@@ -89,21 +95,37 @@ $measureSubscription = Register-ObjectEvent `
             $previousOffsetMs = [double]$s.OffsetMs
             $isTargetChange = [bool]$s.PendingTargetChange -or (-not $s.LastMeasureAt)
             $accepted = $false
+            $insufficientEdges = $false
             $lastResult = $null
             $lastDeltaMs = $null
 
+            # 진짜 재측정(타겟 변경 아님)만 15초 하드캡. 캡은 2회 시도 전체에 공유.
+            # 타겟 변경/첫 측정은 무제한(MaxTotalMs=0)으로 edge 적어도 띄움.
+            $RemeasureBudgetMs = 15000
+            $budgetSw = [System.Diagnostics.Stopwatch]::StartNew()
+
             for ($attempt = 1; $attempt -le 2; $attempt++) {
-                $r = Invoke-AdaptiveMultiSample -Url $s.TargetUrl
+                if ($isTargetChange) {
+                    $maxTotalMs = 0
+                } else {
+                    $remainingMs = $RemeasureBudgetMs - $budgetSw.Elapsed.TotalMilliseconds
+                    # 2회차를 시작할 시간이 부족하면 더 시도 안 함(기존값 유지로 귀결).
+                    if ($attempt -gt 1 -and $remainingMs -lt 2000) { break }
+                    $maxTotalMs = [int][Math]::Max(0, $remainingMs)
+                }
+
+                $r = Invoke-AdaptiveMultiSample -Url $s.TargetUrl -MaxTotalMs $maxTotalMs
                 $lastResult = $r
                 $lastDeltaMs = [Math]::Abs([double]$r.OffsetMs - $previousOffsetMs)
                 $s.LastRemeasureAttempts = $attempt
                 $s.LastRemeasureDeltaMs = $lastDeltaMs
 
-                if ($isTargetChange -or $lastDeltaMs -le 100) {
-                    $accepted = $true
-                    break
-                }
+                $decision = Get-RemeasureAttemptDecision -IsTargetChange $isTargetChange `
+                    -AcceptedCount ([int]$r.AcceptedCount) -DeltaMs $lastDeltaMs
+                if ($decision -eq 'accept') { $accepted = $true; break }
+                if ($decision -eq 'fail-insufficient') { $insufficientEdges = $true; break }
 
+                # 'delta-exceeded' → 재시도
                 Write-LogEvent @{
                     ev = 'remeasure_retry'; host = $s.Host
                     attempt = $attempt; deltaMs = $lastDeltaMs
@@ -117,6 +139,12 @@ $measureSubscription = Register-ObjectEvent `
                 $s.RttMedianMs   = $lastResult.RttMedianMs
                 $s.SigmaMs       = $lastResult.SigmaMs
                 $s.Ci95Ms        = $lastResult.Ci95Ms
+                $s.SampleCount   = $lastResult.SampleCount
+                $s.AcceptedCount = $lastResult.AcceptedCount
+                $s.Method        = $lastResult.Method
+                $s.IntersectWidthMs = $lastResult.IntersectWidthMs
+                $s.LastSamples   = $lastResult.Samples
+                $s.LastEdges     = $lastResult.Edges
                 $s.LastMeasureAt = Get-PcUtcNow
                 $s.LastRemeasureResult = 'accepted'
                 $s.PendingTargetChange = $false
@@ -128,6 +156,15 @@ $measureSubscription = Register-ObjectEvent `
                     sampleCount = $lastResult.SampleCount; acceptedCount = $lastResult.AcceptedCount
                     attempt = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     method = $lastResult.Method
+                }
+            } elseif ($insufficientEdges) {
+                # edge 부족: 적은 edge로 갱신하지 않고 기존 offset 유지. 실패만 표시.
+                $s.LastRemeasureResult = 'failed-insufficient-edges'
+                $s.Status = 'ok'
+                Write-LogEvent @{
+                    ev = 'remeasure_failed_insufficient'; host = $s.Host
+                    acceptedCount = [int]$lastResult.AcceptedCount; method = $lastResult.Method
+                    previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
                 }
             } else {
                 $s.LastRemeasureResult = 'rejected'

@@ -22,6 +22,7 @@ function New-StateStore {
         SampleCount   = 0
         AcceptedCount = 0
         Method        = ''
+        IntersectWidthMs = 0.0
         LastSamples   = @()
         LastEdges     = @()
         Status        = 'idle'
@@ -220,7 +221,9 @@ function Write-StateJson {
         ci95Ms         = $state.Ci95Ms
         sampleCount    = $state.SampleCount
         acceptedCount  = $state.AcceptedCount
+        edgeCount      = @($state.LastEdges).Count
         method         = $state.Method
+        intersectWidthMs = $state.IntersectWidthMs
         status         = $state.Status
         pcSendTimeAtMs = $pcSendTimeAtMs
         ntpInfo        = $state.NtpInfo
@@ -241,6 +244,7 @@ function Write-SamplesJson {
         ci95Ms        = $state.Ci95Ms
         sampleCount   = $state.SampleCount
         acceptedCount = $state.AcceptedCount
+        intersectWidthMs = $state.IntersectWidthMs
         samples       = @($state.LastSamples)
         edges         = @($state.LastEdges)
     }

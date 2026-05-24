@@ -1,5 +1,80 @@
 # 서버시간 측정 서비스 (Server Time Estimator)
 
+## 재측정 정책·안전마진·교집합 audit·문서 통합 (2026-05-24, Claude)
+
+교집합 전환(아래 절)에 이어 같은 날 추가 작업.
+
+### 재측정 정책 (F1/F2)
+
+- `Get-RemeasureAttemptDecision` 신설(`measurement.ps1`): 타겟 변경/첫 측정은 edge 적어도 수용, 진짜 재측정은 `acceptedCount < 5`면 `fail-insufficient`(적은 edge로 갱신 안 함, 기존 offset 유지).
+- `probe.ps1` 재측정 액션: 위 판정 + 15초 하드캡(2회 시도 공유 예산). 실패 시 `LastRemeasureResult='failed-insufficient-edges'`. 타겟 변경은 무제한.
+- `Invoke-AdaptiveMultiSample -MaxTotalMs`: Stopwatch 데드라인. 곧 시작할 요청의 timeout만큼 여유를 두고 새 요청 중단 → in-flight 포함 캡 보장. 0=무제한. `Test-ShouldExtendWindow`로 연장 조건 순수함수화(method가 `edge*`이고 edge<MinEdgeCount).
+- `clock.js`: `failed-insufficient-edges` 상태 메시지 추가.
+
+### 적응형 안전마진
+
+- `clock.js`: 고정 30ms → `max(30, rttMedianMs*0.3)`. RTT 비대칭(업로드 정체)이 표시를 빠르게 미는 위험이 RTT에 비례하므로 마진도 비례. stats 줄에 실제 마진 표시.
+
+### 교집합 과신 audit (사용자 의문 "계속 성공으로 뜬다")
+
+- 몬테카를로 800회: 대칭 조건 coverage 100% 정상. 그러나 RTT 비대칭 +40/+80ms에서도 `edge-intersect`가 100% 뜨면서 진짜 θ가 보고 ± 밖에 98~99% → 교집합은 공통 편향을 못 잡는다(상호 일치 ≠ 정확).
+- 대응(코드 버그 아님, 정직성): `methodLabel`에서 ✓/"전부 일치" 제거 → "상호 일치(정확도 보장 아님)". stats의 ±를 교집합 계열은 "일치폭 ±N(비대칭 미반영)"으로 표기.
+
+### 정리(죽은 코드)
+
+- `Select-EdgeOffsetCandidates`, `Invoke-MultiSample` 제거(미사용). RTT 임계값을 `Get-RttThreshold`로 통일.
+
+### 문서 통합 (docs 3개로)
+
+- `docs/superpowers/`(초기 Node/CLI 설계·계획 아카이브), 루트 `bash.exe.stackdump` 삭제.
+- `프로젝트_전체_설명.md` + `성능분석.md` + `naver-clock-vs-date-header.md` + `2026-05-02-phase-delay-fix.md` → **`docs/프로젝트_기술문서.md`** 로 통합(stale 내용 교정). 따라서 2026-05-08 절의 "phase-delay-fix.md는 유지" 지시는 무효 — 내용은 기술문서 §10 변경이력에 흡수됨.
+- `방법비교_*.html` → `알고리즘_설명.html`의 13~14장으로 흡수. `docs/README.md`는 3-문서 인덱스로 갱신.
+- 배포본 `release/ServerTimeTools/`의 `src` 동기화 + zip 재생성(새 알고리즘 반영).
+
+## Edge 오프셋: 중앙값 → 1초 격자 교집합(하이브리드) 전환 (2026-05-24, Claude)
+
+기존 edge 추정은 각 edge의 중점 offset들을 **독립 측정**으로 보고 median을 냈다(`method='edge'`). 이를 **1초 격자 제약을 활용한 교집합 추정**으로 바꿨다.
+
+### 결정 근거
+
+오프셋 θ는 측정 윈도우 내내 상수이고, 서버 초 경계는 PC 시간축에서 정확히 1000ms 간격이다. 각 edge는 인접 두 서버이벤트 PC시각 `L, R` 사이에 경계가 있다는 정보 → `θ ∈ (S−R, S−L)` 라는 **구간 제약**을 준다. θ는 하나이므로 모든 구간을 동시에 만족 = **교집합**.
+
+균등노이즈 가정에서 교집합 중점이 MLE이고, edge 수 n에 대해 오차가 중앙값의 `1/√n`이 아니라 **`1/n`** 로 줄어든다(독일 탱크 문제). 워크드 예제: 동일 데이터에서 median 오차 45ms → 교집합 5ms.
+
+### 하이브리드 (robustness)
+
+교집합은 outlier 1개에 취약(공집합화)하므로 최대겹침(interval stabbing)으로 합의 부분집합을 찾는다:
+
+- 전체 일치 → `edge-intersect`
+- 일부 outlier 제외 후 일치(최대겹침 ≥ 2) → `edge-intersect-robust`
+- 어떤 두 edge도 안 겹침(최대겹침 = 1) → `edge-median` (중점 median 폴백)
+- edge 0개 → 기존 `upper-envelope` 폴백 유지
+
+### 수정 내역
+
+- `src/measurement.ps1`
+  - `Get-EdgeDetails`: 각 edge에 `LowerMs = S−R`, `UpperMs = S−L` 추가(`OffsetMs`=중점=`(Lower+Upper)/2`).
+  - `Get-HybridOffsetEstimate` 신설: O(n²) 스윕으로 최대겹침 영역 교집합, 동률은 전체 중점 median에 가까운 영역 선택. 반환 `OffsetMs/Method/UsedCount/WidthMs`.
+  - `Reduce-Samples`: edge가 있으면 하이브리드 사용. `Ci95Ms`는 교집합 계열이면 `WidthMs/2`(hard bound), `edge-median`이면 기존 통계적 CI. `IntersectWidthMs` 필드 추가.
+  - **버그픽스**: `Get-Median`이 `[int]($n/2)`의 은행가 반올림(`[int]1.5=2`)으로 홀수 n(3,7,11…)에서 가운데를 빗나갔다. `[Math]::Floor`로 교정. (기존 테스트가 n=5,9만 써서 안 드러났음.)
+- `src/probe.ps1`, `src/http-server.ps1`: `IntersectWidthMs` state 전파, `/api/state`에 `edgeCount`·`intersectWidthMs`, `/api/samples`에 `intersectWidthMs` 노출. edge 요약에 `lowerMs/upperMs` 추가.
+- `src/web/clock.js`: `methodLabel()` 추가. 항상 보이는 stats 줄과 측정 상세 요약에 사용된 방법을 한국어로 명시(예: `교집합 ✓ (edge 5개 전부 일치)`, `교집합 (이상치 1개 제외, edge 5/6개)`). 상세에 교집합 폭 표시.
+- `tests/Measurement.Tests.ps1`: `Get-HybridOffsetEstimate` 4케이스, `Get-EdgeDetails` 경계, `Get-Median` n=3/n=7 회귀 추가. 기존 edge 테스트는 `edge-intersect`/오차<30ms로 갱신.
+
+### 검증
+
+```
+Invoke-Pester -Script tests\Measurement.Tests.ps1,tests\Anchor.Tests.ps1,tests\Ntp.Tests.ps1
+Passed: 19 Failed: 0
+```
+
+통합 확인(RTT 90ms, 5 edge): `edge-intersect`, 오차 10ms, 교집합 폭 20ms(±10ms).
+
+### 주의
+
+- 교집합 폭/2를 ±값으로 보고하므로 RTT 비대칭 같은 **계통오차는 잡지 못한다**(이건 median 방식도 동일). 폭은 통계적 산포가 아니라 feasible 영역의 hard bound다.
+- `naver-time-api` 경로는 ms 정밀이라 edge 비대상 → `Reduce-PreciseSamples` 그대로(교집합 미적용, `IntersectWidthMs` 없음).
+
 ## 적응형 샘플링 전환 (2026-05-08, Codex)
 
 `Count=50, IntervalMs=100` 고정 → **`IntervalMs=50` 고정 + `Count` 적응형(약 6초 윈도우)** 으로 변경.

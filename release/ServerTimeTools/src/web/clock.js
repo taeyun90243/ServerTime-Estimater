@@ -1,8 +1,11 @@
 (function() {
   const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
   // 수강신청 등 "절대 빠르면 안 되는" 용도용 안전 마진.
-  // 표시 시각 = 추정 서버 시각 - SAFETY_BIAS_MS. 항상 실제보다 늦게 표시된다.
-  const SAFETY_BIAS_MS = 30;
+  // 표시 시각 = 추정 서버 시각 - 안전마진. 항상 실제보다 늦게 표시된다.
+  // RTT 비대칭(업로드 정체)이 표시를 빠르게 밀 수 있는데 그 위험은 RTT에 비례하므로,
+  // 마진도 max(고정 30ms, RTT×0.3)로 적응시킨다. RTT 90ms→30, 200ms→60, 400ms→120.
+  const SAFETY_FLOOR_MS = 30;
+  const SAFETY_RTT_FRACTION = 0.3;
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
   const ticksGroup = document.getElementById('ticks');
@@ -168,6 +171,35 @@
     }
   }
 
+  // RTT에 비례하는 적응형 안전마진(ms). state.rttMedianMs가 아직 없으면 floor만.
+  function currentSafetyMs() {
+    const rtt = (state && typeof state.rttMedianMs === 'number') ? state.rttMedianMs : 0;
+    return Math.max(SAFETY_FLOOR_MS, rtt * SAFETY_RTT_FRACTION);
+  }
+
+  // 측정에 실제로 쓰인 추정 방법을 사람이 읽을 라벨로.
+  // 주의: edge-intersect는 edge들이 "서로" 모순 없다는 뜻이지 "정확하다"는 보장이 아니다.
+  // RTT 비대칭은 모든 edge를 같은 방향으로 밀어 상호 일치를 유지한 채 집단 편향을 만든다
+  // → 교집합으로는 못 잡는다. 그래서 ✓ 같은 "성공" 표시를 쓰지 않는다.
+  function methodLabel(method, edgeCount, acceptedCount) {
+    const ec = edgeCount || 0;
+    const ac = acceptedCount || 0;
+    switch (method) {
+      case 'edge-intersect':
+        return `교집합 (edge ${ec}개 상호 일치)`;
+      case 'edge-intersect-robust':
+        return `교집합 (이상치 ${Math.max(0, ec - ac)}개 제외, edge ${ac}/${ec}개)`;
+      case 'edge-median':
+        return `중앙값 폴백 (edge ${ec}개 상호 불일치)`;
+      case 'upper-envelope':
+        return '상한봉투 폴백 (edge 미검출)';
+      case 'naver-time-api':
+        return '네이버 시계 API (ms 정밀)';
+      default:
+        return method || '?';
+    }
+  }
+
   function nowEstimateMs() {
     if (baseServerMs == null) return null;
     return baseServerMs + (performance.now() - basePerfMs);
@@ -190,7 +222,8 @@
     lastRenderPerfMs = perfNow;
 
     const estimateMs = nowEstimateMs();
-    const ms = estimateMs == null ? null : estimateMs - SAFETY_BIAS_MS;
+    const safetyMs = currentSafetyMs();
+    const ms = estimateMs == null ? null : estimateMs - safetyMs;
     if (ms == null) {
       if (state) document.getElementById('host').textContent = state.host || 'URL을 입력하세요';
       document.getElementById('stats').textContent = '';
@@ -245,8 +278,15 @@
       : '-';
     const sampleCount = state.sampleCount || 0;
     const acceptedCount = state.acceptedCount || 0;
+    const label = methodLabel(state.method, state.edgeCount, acceptedCount);
+    // 교집합 계열의 ±는 "일치 폭"(feasible 영역 반폭)이지 정확도 보장이 아니다.
+    // RTT 비대칭 같은 공통 편향은 이 폭에 안 잡힘 → '일치폭'으로 명시.
+    const isIntersect = (state.method || '').indexOf('edge-intersect') === 0;
+    const spreadLabel = isIntersect
+      ? `일치폭 ±${Math.round(state.ci95Ms || 0)}ms(비대칭 미반영)`
+      : `±${Math.round(state.ci95Ms || 0)}ms`;
     document.getElementById('stats').textContent =
-      `측정: ${ago}초 전  RTT ${Math.round(state.rttMedianMs || 0)}ms  ±${Math.round(state.ci95Ms || 0)}ms  샘플 ${sampleCount}개 (edge ${acceptedCount}개)  안전마진 -${SAFETY_BIAS_MS}ms`;
+      `측정: ${ago}초 전  RTT ${Math.round(state.rttMedianMs || 0)}ms  ${spreadLabel}  샘플 ${sampleCount}개  방법: ${label}  안전마진 -${Math.round(safetyMs)}ms`;
 
     const ntp = document.getElementById('ntp');
     if (state.ntpInfo) {
@@ -266,6 +306,8 @@
       setStatusText('측정 대기 중...', false, true);
     } else if (state.status === 'measuring') {
       setStatusText(hasPendingRemeasure() || localReloadRemeasure ? '재측정 중... (약 6초)' : '초기 측정 중...', false, hasPendingRemeasure() || localReloadRemeasure);
+    } else if (state.lastRemeasureResult === 'failed-insufficient-edges') {
+      setStatusText('재측정 실패 (edge 부족): 기존값 유지', true, true);
     } else if (state.lastRemeasureResult === 'rejected') {
       const delta = Math.round(state.lastRemeasureDeltaMs || 0);
       setStatusText(`재측정 편차 ${delta}ms 초과: 기존값 유지`, true, true);
@@ -435,13 +477,17 @@
 
     // 요약
     const elapsedTotal = (totalMs / 1000).toFixed(2);
+    const label = methodLabel(data.method, edges.length, data.acceptedCount);
+    const widthPart = (typeof data.intersectWidthMs === 'number' && data.intersectWidthMs > 0)
+      ? ` | 교집합 폭 ${Math.round(data.intersectWidthMs)}ms`
+      : '';
     detailsSummary.innerHTML =
-      `<strong>${data.method || '?'}</strong> 방법 | ` +
+      `방법: <strong>${label}</strong> | ` +
       `샘플 <strong>${samples.length}</strong>개 | ` +
       `edge <strong>${edges.length}</strong>개 | ` +
       `총 측정 ${elapsedTotal}초 | ` +
       `RTT median ${Math.round(rttMedian)}ms | ` +
-      `±${Math.round(data.ci95Ms || 0)}ms`;
+      `±${Math.round(data.ci95Ms || 0)}ms${widthPart}`;
   }
 
   function showTooltip(evt, s, t0) {
