@@ -1,5 +1,45 @@
 # 서버시간 측정 서비스 (Server Time Estimator)
 
+## CDN Age 헤더 보정 (CloudFront frozen-Date 대응) (2026-05-24, Claude)
+
+사용자 보고: `https://nol.interpark.com/ticket`에서 upper-envelope 폴백이 뜨고, HEAD를 몇 초간 반복해도 같은 시각만 반환됨.
+
+### 근본 원인
+
+`nol.interpark.com`은 CloudFront 엣지 캐시 뒤에 있다. 캐시 응답은 `Date`를 **적재 시각에 고정**하고(예: `:13`에 고정), 경과 시간은 `Age` 헤더(초, RFC 9111)로 노출한다. 기존 코드는 `Date`만 읽고 `N→N+1` 전환만 edge로 검출하므로:
+- `Date`가 안 움직임 → edge 0개 → `upper-envelope` 폴백.
+- 폴백 offset이 고정된 `:13` 기준이라 표시 시각이 정지·드리프트.
+
+실측: raw Date 초 = `13`(고정), `Date+Age` 초 = `13,14,15,16,17,18,19,20`(정수 초 경계에서 깔끔히 증가).
+
+### 수정
+
+- `measurement.ps1` `Get-EffectiveServerDateMs` 신설: 실효 서버시각 = `Date + Age*1000`. Age는 정수 초 경계에서 증가하므로 결합값은 1초 해상도 라이브 클럭 → 기존 edge-intersect 파이프라인이 그대로 동작(ms 정밀 유지). Age 없으면 0 → Date 원본(일반 origin 무영향).
+- `Invoke-HeadProbe`/`Invoke-RangeGetDateProbe`: `Age` 헤더 읽어 `serverDateMs`에 반영.
+- 테스트 4건 추가(`Get-EffectiveServerDateMs` 3 + frozen-Date+Age edge 통합 1). `Format-RfcDate` 테스트 헬퍼 추가.
+
+### 검증
+
+```
+Invoke-Pester tests\Measurement.Tests.ps1,tests\Anchor.Tests.ps1,tests\Ntp.Tests.ps1  → Passed: 35 Failed: 0
+```
+
+실사이트(nol.interpark.com): `upper-envelope` → `edge-intersect`, edge 9개, 교집합 폭 ~19ms, RTT median 17ms.
+
+### 범용성 검증
+
+7개 사이트 조사: google/github/cloudflare/interpark.com/ticket.interpark.com/melon티켓 = live Date+Age없음(→ +0 무변화), nol.interpark.com = frozen Date+Age(→ 복구). "live Date + Age 동시" 케이스는 없었고 RFC 비준수. 그런 변종도 Age 매초 증가 시 결합값 2초/초 → edge 필터(900~1100ms)에 걸려 자동 폴백.
+
+### 네이비즘 ~10초 차이 진단 (사용자 보고)
+
+`nol.interpark.com`에서 네이비즘 대비 ~10초 차이. google live Date(독립 기준)와 동시 비교: `Date+Age`=진짜 UTC ±0.5초, 전체 파이프라인 표시값 ±0.06초. frozen Date와 실제 차이(=Age값, ≈10초)가 곧 격차. **네이비즘이 Age 보정 없이 캐시 Date를 읽어 ~10초 뒤처진 것이고, 이 도구가 정확.** (사용자 실행 환경: ServerTimeProbe.exe는 옆 src를 실행하므로 release/src 동기화 필수.)
+
+### 주의
+
+- Age는 정수 초라 결합값은 초 해상도(일반 Date와 동일). sub-second는 edge intersection이 핀하므로 정밀도 손실 없음.
+- 라이브 `Date`를 주면서 동시에 `Age`도 보내는 비정상 프록시에선 과보정 가능하나, RFC상 캐시는 origin의 Date를 보존하므로 정상 동작.
+- 배포본 `release/ServerTimeTools/src/measurement.ps1` 동기화 + zip 재생성 완료.
+
 ## 재측정 정책·안전마진·교집합 audit·문서 통합 (2026-05-24, Claude)
 
 교집합 전환(아래 절)에 이어 같은 날 추가 작업.

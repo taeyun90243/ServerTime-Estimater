@@ -30,6 +30,23 @@ function ConvertTo-DateMs {
     return ConvertTo-UnixMs -Utc $dt
 }
 
+function Get-EffectiveServerDateMs {
+    # CDN/캐시(예: CloudFront)는 Date를 캐시 적재 시각에 고정하고, 경과 시간은
+    # Age 헤더(초, RFC 9111)로 노출한다. 이때 실제 서버 현재 시각 = Date + Age.
+    # Age는 서버 정수 초 경계에서 1씩 증가하므로, 결합값은 1초 해상도의 라이브
+    # 클럭이 되어 기존 edge detection이 그대로 동작한다. (frozen Date만 보면
+    # 전환이 안 보여 upper-envelope 폴백 + 정지된 시각이 나온다.)
+    # Age가 없으면(일반 origin) 0으로 취급 → Date 원본 그대로.
+    param(
+        [Parameter(Mandatory)][string]$DateHeader,
+        [string]$AgeHeader
+    )
+    $dateMs = ConvertTo-DateMs $DateHeader
+    $ageSec = 0
+    if ($AgeHeader -and ($AgeHeader -match '^\s*(\d+)\s*$')) { $ageSec = [int]$Matches[1] }
+    return $dateMs + ($ageSec * 1000)
+}
+
 function ConvertTo-NaverTimeMs {
     param([Parameter(Mandatory)][string]$NaverTime)
     if ($NaverTime -notmatch '^(\d{4})/(\d{2})/(\d{2})/(\d{2})/(\d{2})/(\d{2})/(\d{3})$') {
@@ -89,6 +106,7 @@ function Invoke-RangeGetDateProbe {
         return [PSCustomObject]@{
             Headers = @{
                 Date = $response.Headers['Date']
+                Age  = $response.Headers['Age']
             }
         }
     } finally {
@@ -126,8 +144,13 @@ function Invoke-HeadProbe {
     # Headers.Date is returned as String[], take the first element
     if ($dateHdr -is [array]) { $dateHdr = $dateHdr[0] }
 
+    # CDN/캐시(CloudFront 등)는 Date를 적재 시각에 고정하고 경과를 Age로 노출한다.
+    # 실제 서버 현재 시각 = Date + Age. Age 없으면 0 → Date 원본. (Get-EffectiveServerDateMs)
+    $ageHdr = $resp.Headers.Age
+    if ($ageHdr -is [array]) { $ageHdr = $ageHdr[0] }
+
     $rttMs = Get-StopwatchElapsedMs -StartTicks $t1 -EndTicks $t2
-    $serverDateMs = ConvertTo-DateMs $dateHdr
+    $serverDateMs = Get-EffectiveServerDateMs -DateHeader $dateHdr -AgeHeader $ageHdr
     $pcAtT2Ms = ConvertTo-UnixMs -Utc $pcAtT2
     $rawOffsetMs = Get-OffsetMs -ServerDateMs $serverDateMs -RttMs $rttMs -PcAtT2Ms $pcAtT2Ms
 

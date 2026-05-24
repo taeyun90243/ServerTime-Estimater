@@ -1,5 +1,11 @@
 ﻿. "$PSScriptRoot\..\src\measurement.ps1"
 
+function Format-RfcDate {
+    # unix-ms -> RFC 1123 Date 헤더 문자열 (테스트용)
+    param([Parameter(Mandatory)][double]$UnixMs)
+    return [DateTimeOffset]::FromUnixTimeMilliseconds([long]$UnixMs).UtcDateTime.ToString('R', [Globalization.CultureInfo]::InvariantCulture)
+}
+
 Describe 'Measurement pure functions' {
     It 'ConvertTo-DateMs parses RFC 1123 Date header' {
         $ms = ConvertTo-DateMs 'Thu, 30 Apr 2026 18:27:26 GMT'
@@ -15,6 +21,23 @@ Describe 'Measurement pure functions' {
         $offset = Get-OffsetMs -ServerDateMs $tsMs -RttMs $rttMs -PcAtT2Ms $pcAtT2Ms
         $expected = ($tsMs + 30) - $pcAtT2Ms
         $offset | Should Be $expected
+    }
+
+    It 'Get-EffectiveServerDateMs returns Date unchanged when no Age header' {
+        $expected = ConvertTo-DateMs 'Sun, 24 May 2026 08:44:13 GMT'
+        Get-EffectiveServerDateMs -DateHeader 'Sun, 24 May 2026 08:44:13 GMT' | Should Be $expected
+    }
+
+    It 'Get-EffectiveServerDateMs adds Age seconds to a cache-frozen Date (CloudFront)' {
+        # Date frozen at :13, Age=7 -> real server second is :20
+        $base = ConvertTo-DateMs 'Sun, 24 May 2026 08:44:13 GMT'
+        Get-EffectiveServerDateMs -DateHeader 'Sun, 24 May 2026 08:44:13 GMT' -AgeHeader '7' | Should Be ($base + 7000)
+    }
+
+    It 'Get-EffectiveServerDateMs treats blank/zero Age as no offset' {
+        $base = ConvertTo-DateMs 'Sun, 24 May 2026 08:44:13 GMT'
+        Get-EffectiveServerDateMs -DateHeader 'Sun, 24 May 2026 08:44:13 GMT' -AgeHeader '' | Should Be $base
+        Get-EffectiveServerDateMs -DateHeader 'Sun, 24 May 2026 08:44:13 GMT' -AgeHeader '0' | Should Be $base
     }
 }
 
@@ -76,6 +99,34 @@ Describe 'Sample reduction algorithm' {
                 PcAtT2Ms = $pcAtT2Ms
                 RawOffsetMs = ($serverDateMs + $rttMs / 2.0) - $pcAtT2Ms
                 OffsetMs = ($serverDateMs + $rttMs / 2.0 + 500.0) - $pcAtT2Ms
+            }
+        }
+        $r = Reduce-Samples -Samples $samples
+        $r.Method | Should Be 'edge-intersect'
+        [Math]::Abs($r.OffsetMs - $trueOffsetMs) | Should BeLessThan 30
+    }
+
+    It 'detects edges from Date+Age combined clock when raw Date is cache-frozen' {
+        # CloudFront 시나리오: Date는 한 초에 고정, Age가 매초 증가.
+        # ServerDateMs를 Date+Age로 만들면 frozen Date여도 edge가 보여야 한다.
+        $pcBaseMs = 2000000.0
+        $trueOffsetMs = 350.0
+        $frozenDateSecMs = [Math]::Floor(($pcBaseMs + $trueOffsetMs) / 1000.0) * 1000.0
+        $samples = 0..49 | ForEach-Object {
+            $pcEventMs = $pcBaseMs + ($_ * 100.0)
+            $serverEventMs = $pcEventMs + $trueOffsetMs
+            # 실제 서버 초 = floor(serverEvent/1000). Date는 frozen, Age가 그 차이를 메운다.
+            $realServerSecMs = [Math]::Floor($serverEventMs / 1000.0) * 1000.0
+            $ageSec = [int](($realServerSecMs - $frozenDateSecMs) / 1000.0)
+            $combinedMs = Get-EffectiveServerDateMs -DateHeader (Format-RfcDate $frozenDateSecMs) -AgeHeader "$ageSec"
+            $rttMs = 20.0
+            $pcAtT2Ms = $pcEventMs + ($rttMs / 2.0)
+            [PSCustomObject]@{
+                RttMs = $rttMs
+                ServerDateMs = $combinedMs
+                PcAtT2Ms = $pcAtT2Ms
+                RawOffsetMs = ($combinedMs + $rttMs / 2.0) - $pcAtT2Ms
+                OffsetMs = ($combinedMs + $rttMs / 2.0) - $pcAtT2Ms
             }
         }
         $r = Reduce-Samples -Samples $samples
