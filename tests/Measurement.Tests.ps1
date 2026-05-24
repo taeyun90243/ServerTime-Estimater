@@ -106,31 +106,61 @@ Describe 'Sample reduction algorithm' {
         [Math]::Abs($r.OffsetMs - $trueOffsetMs) | Should BeLessThan 30
     }
 
-    It 'detects edges from Date+Age combined clock when raw Date is cache-frozen' {
-        # CloudFront 시나리오: Date는 한 초에 고정, Age가 매초 증가.
-        # ServerDateMs를 Date+Age로 만들면 frozen Date여도 edge가 보여야 한다.
+    It 'applies Age only when raw Date is FROZEN across the window (CloudFront cache)' {
+        # frozen Date 캐시: raw Date는 한 초에 고정, Age가 매초 증가.
+        # Reduce-Samples가 frozen으로 판정 → ServerDateMs = Date+Age → edge 복구.
         $pcBaseMs = 2000000.0
         $trueOffsetMs = 350.0
         $frozenDateSecMs = [Math]::Floor(($pcBaseMs + $trueOffsetMs) / 1000.0) * 1000.0
         $samples = 0..49 | ForEach-Object {
             $pcEventMs = $pcBaseMs + ($_ * 100.0)
             $serverEventMs = $pcEventMs + $trueOffsetMs
-            # 실제 서버 초 = floor(serverEvent/1000). Date는 frozen, Age가 그 차이를 메운다.
             $realServerSecMs = [Math]::Floor($serverEventMs / 1000.0) * 1000.0
             $ageSec = [int](($realServerSecMs - $frozenDateSecMs) / 1000.0)
-            $combinedMs = Get-EffectiveServerDateMs -DateHeader (Format-RfcDate $frozenDateSecMs) -AgeHeader "$ageSec"
             $rttMs = 20.0
             $pcAtT2Ms = $pcEventMs + ($rttMs / 2.0)
             [PSCustomObject]@{
                 RttMs = $rttMs
-                ServerDateMs = $combinedMs
+                RawServerDateMs = $frozenDateSecMs   # 고정
+                AgeSec = $ageSec                     # 매초 증가
+                ServerDateMs = $frozenDateSecMs      # 기본값(raw); resolver가 덮어씀
                 PcAtT2Ms = $pcAtT2Ms
-                RawOffsetMs = ($combinedMs + $rttMs / 2.0) - $pcAtT2Ms
-                OffsetMs = ($combinedMs + $rttMs / 2.0) - $pcAtT2Ms
+                RawOffsetMs = ($frozenDateSecMs + $rttMs / 2.0) - $pcAtT2Ms
+                OffsetMs = ($frozenDateSecMs + $rttMs / 2.0) - $pcAtT2Ms
             }
         }
         $r = Reduce-Samples -Samples $samples
+        $r.AgeCorrected | Should Be $true
         $r.Method | Should Be 'edge-intersect'
+        [Math]::Abs($r.OffsetMs - $trueOffsetMs) | Should BeLessThan 30
+    }
+
+    It 'does NOT add Age when raw Date is LIVE even if Age is nonzero (no whole-second overshoot)' {
+        # ticket.interpark.com 회귀: raw Date가 매초 살아 움직이는데 Age=6이 붙는 경우.
+        # Age를 더하면 +6000ms 미래로 과보정 → 반드시 raw Date를 써야 함.
+        $pcBaseMs = 2000000.0
+        $trueOffsetMs = 350.0
+        $spuriousAge = 6
+        $samples = 0..119 | ForEach-Object {
+            $pcEventMs = $pcBaseMs + ($_ * 100.0)
+            $serverEventMs = $pcEventMs + $trueOffsetMs
+            $liveDateMs = [Math]::Floor($serverEventMs / 1000.0) * 1000.0   # 매초 증가(live)
+            $rttMs = 20.0
+            $pcAtT2Ms = $pcEventMs + ($rttMs / 2.0)
+            [PSCustomObject]@{
+                RttMs = $rttMs
+                RawServerDateMs = $liveDateMs
+                AgeSec = $spuriousAge
+                ServerDateMs = $liveDateMs
+                PcAtT2Ms = $pcAtT2Ms
+                RawOffsetMs = ($liveDateMs + $rttMs / 2.0) - $pcAtT2Ms
+                OffsetMs = ($liveDateMs + $rttMs / 2.0) - $pcAtT2Ms
+            }
+        }
+        $r = Reduce-Samples -Samples $samples
+        $r.AgeCorrected | Should Be $false
+        $r.Method | Should Be 'edge-intersect'
+        # +6000ms 과보정이 없어야 한다: 진짜 오프셋 근처여야 함.
         [Math]::Abs($r.OffsetMs - $trueOffsetMs) | Should BeLessThan 30
     }
 }

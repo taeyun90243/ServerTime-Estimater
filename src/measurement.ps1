@@ -31,12 +31,12 @@ function ConvertTo-DateMs {
 }
 
 function Get-EffectiveServerDateMs {
-    # CDN/캐시(예: CloudFront)는 Date를 캐시 적재 시각에 고정하고, 경과 시간은
-    # Age 헤더(초, RFC 9111)로 노출한다. 이때 실제 서버 현재 시각 = Date + Age.
-    # Age는 서버 정수 초 경계에서 1씩 증가하므로, 결합값은 1초 해상도의 라이브
-    # 클럭이 되어 기존 edge detection이 그대로 동작한다. (frozen Date만 보면
-    # 전환이 안 보여 upper-envelope 폴백 + 정지된 시각이 나온다.)
-    # Age가 없으면(일반 origin) 0으로 취급 → Date 원본 그대로.
+    # Date + Age 산술 헬퍼. **주의**: 이 결합은 raw Date가 'frozen'(정지)일 때만 옳다.
+    # frozen Date 캐시(예: CloudFront)는 Date를 적재 시각에 고정하고 경과를 Age(초,
+    # RFC 9111)로 노출하므로 Date+Age = 현재 시각. 그러나 Date가 라이브(매초 증가)인데
+    # Age도 0이 아니면 Date+Age는 정수 초만큼 미래로 과보정된다. 따라서 호출은
+    # Set-AgeCorrectedServerDates의 frozen 판정 뒤에만 해야 한다. (이 함수 자체는
+    # 무조건 더하기만 하므로 단독 사용 금지.)
     param(
         [Parameter(Mandatory)][string]$DateHeader,
         [string]$AgeHeader
@@ -144,13 +144,18 @@ function Invoke-HeadProbe {
     # Headers.Date is returned as String[], take the first element
     if ($dateHdr -is [array]) { $dateHdr = $dateHdr[0] }
 
-    # CDN/캐시(CloudFront 등)는 Date를 적재 시각에 고정하고 경과를 Age로 노출한다.
-    # 실제 서버 현재 시각 = Date + Age. Age 없으면 0 → Date 원본. (Get-EffectiveServerDateMs)
+    # Age 헤더는 따로 들고만 간다. 기본 ServerDateMs는 raw Date(안전).
+    # Age 보정은 윈도우 전체를 보고 'Date가 정지(frozen)'로 판정될 때만
+    # Reduce-Samples(=Set-AgeCorrectedServerDates)에서 적용한다. 라이브 Date에
+    # Age를 더하면 정수 초만큼 미래로 과보정되기 때문(ticket.interpark.com 회귀).
     $ageHdr = $resp.Headers.Age
     if ($ageHdr -is [array]) { $ageHdr = $ageHdr[0] }
+    $ageSec = 0
+    if ($ageHdr -and ($ageHdr -match '^\s*(\d+)\s*$')) { $ageSec = [int]$Matches[1] }
 
     $rttMs = Get-StopwatchElapsedMs -StartTicks $t1 -EndTicks $t2
-    $serverDateMs = Get-EffectiveServerDateMs -DateHeader $dateHdr -AgeHeader $ageHdr
+    $rawServerDateMs = ConvertTo-DateMs $dateHdr
+    $serverDateMs = $rawServerDateMs
     $pcAtT2Ms = ConvertTo-UnixMs -Utc $pcAtT2
     $rawOffsetMs = Get-OffsetMs -ServerDateMs $serverDateMs -RttMs $rttMs -PcAtT2Ms $pcAtT2Ms
 
@@ -159,6 +164,8 @@ function Invoke-HeadProbe {
         RawOffsetMs      = $rawOffsetMs
         OffsetMs         = $rawOffsetMs
         ServerDateMs     = $serverDateMs
+        RawServerDateMs  = $rawServerDateMs
+        AgeSec           = $ageSec
         PcAtT2Ms         = $pcAtT2Ms
         DateHdr          = $dateHdr
     }
@@ -485,8 +492,45 @@ function Get-HybridOffsetEstimate {
     }
 }
 
+function Set-AgeCorrectedServerDates {
+    # Age 보정을 '언제' 적용할지 윈도우 전체를 보고 결정한다.
+    #
+    #   - raw Date가 윈도우 내내 사실상 정지(span <= FrozenSpanMs)인데 Age>0가 있으면
+    #     → CDN frozen-Date 캐시(예: CloudFront nol.interpark.com). Date는 멈췄고 Age가
+    #       경과를 메우므로 ServerDateMs = Date + Age*1000 로 복구한다. (AgeCorrected=$true)
+    #   - 그 외(= raw Date가 매초 살아 움직임) → raw Date가 이미 정답. Age가 0이 아니어도
+    #     절대 더하지 않는다. 라이브 Date에 Age를 더하면 정수 초만큼 미래로 과보정되어
+    #     "edge는 다 맞는데 N초 빠른" 위험한 표시가 된다(ticket.interpark.com 회귀).
+    #
+    # RawServerDateMs/AgeSec가 없는 샘플(네이버 경로·구형 단위테스트)은 건드리지 않는다.
+    # 각 샘플의 ServerDateMs/OffsetMs/RawOffsetMs를 raw에서 다시 계산하므로 idempotent.
+    param(
+        [Parameter(Mandatory)]$Samples,
+        [double]$FrozenSpanMs = 2000
+    )
+    $withRaw = @($Samples | Where-Object { $null -ne $_.RawServerDateMs })
+    if ($withRaw.Count -eq 0) { return $false }
+
+    $raws = @($withRaw | ForEach-Object { [double]$_.RawServerDateMs })
+    $span = ($raws | Measure-Object -Maximum).Maximum - ($raws | Measure-Object -Minimum).Minimum
+    $anyAge = @($withRaw | Where-Object { [int]$_.AgeSec -gt 0 }).Count -gt 0
+    $frozen = ($span -le $FrozenSpanMs) -and $anyAge
+
+    foreach ($s in $withRaw) {
+        $eff = if ($frozen) { [double]$s.RawServerDateMs + ([int]$s.AgeSec) * 1000 } else { [double]$s.RawServerDateMs }
+        $s.ServerDateMs = $eff
+        $newOffset = Get-OffsetMs -ServerDateMs $eff -RttMs ([double]$s.RttMs) -PcAtT2Ms ([double]$s.PcAtT2Ms)
+        $s.OffsetMs = $newOffset
+        $s.RawOffsetMs = $newOffset
+    }
+    return $frozen
+}
+
 function Reduce-Samples {
     param([Parameter(Mandatory)]$Samples)
+    # Age 보정 여부를 먼저 결정(frozen Date 캐시일 때만 Date+Age). 라이브 Date면 raw 유지.
+    $ageCorrected = Set-AgeCorrectedServerDates -Samples $Samples
+
     # Prefer real Date-header edge detection: when Date jumps N -> N+1, the
     # server second boundary lies between those two server-event estimates.
     $edgeDetails = Get-EdgeDetails -Samples $Samples
@@ -504,6 +548,7 @@ function Reduce-Samples {
             SampleCount    = $Samples.Count
             AcceptedCount  = $candidates.Count
             Method         = 'upper-envelope'
+            AgeCorrected   = $ageCorrected
             Samples        = (ConvertTo-SampleSummaries -Samples $Samples)
             Edges          = @()
         }
@@ -529,6 +574,7 @@ function Reduce-Samples {
         AcceptedCount  = $hybrid.UsedCount
         Method         = $hybrid.Method
         IntersectWidthMs = $hybrid.WidthMs
+        AgeCorrected   = $ageCorrected
         Samples        = (ConvertTo-SampleSummaries -Samples $Samples)
         Edges          = (ConvertTo-EdgeSummaries -Edges $edgeDetails)
     }

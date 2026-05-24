@@ -1,5 +1,34 @@
 # 서버시간 측정 서비스 (Server Time Estimator)
 
+## Age 보정 조건부화 (ticket.interpark.com +N초 과보정 회귀 수정) (2026-05-24, Claude)
+
+바로 아래 절(무조건 `Date+Age`)의 **회귀**를 잡은 후속 수정.
+
+### 증상
+
+사용자가 `ticket.interpark.com`을 측정하니 네이비즘보다 **6~8초 빠르게** 표시됨. edge가 8/8 전부 일치(±8ms)인데도 초 단위로 어긋남. 사용자 지적: "edge가 맞아도 차이 난다 = ms가 아닌 초 단위 = 다른 걸 보고 있다."
+
+### 근본 원인
+
+`Age`는 **정수 초**다. 무조건 `Date+Age`를 더하면, `Date`가 이미 라이브(매초 증가)인데 응답에 일정한 `Age=k`가 붙는 경우(CDN 재검증/edge별 캐시 상태) **모든 샘플이 +k초 평행이동** → edge끼리는 완벽히 일치(깔끔한 `edge-intersect`)하면서 표시가 k초 미래로 감. 티켓팅에서 가장 위험한 "빠른 표시". 실측: 같은 PC에서 `ticket.interpark.com`은 Age=0(120/120) 라이브였으나, 측정 순간의 edge 상태에 따라 v1이 +6초 과보정.
+
+핵심: **라이브 `Date`면 raw `Date`가 이미 정답이라 `Age`가 불필요**. `Age`는 `Date`가 정지(frozen)일 때만 의미.
+
+### 수정 (`measurement.ps1`)
+
+- `Invoke-HeadProbe`: `Date+Age`를 미리 합치지 않고 `RawServerDateMs`/`AgeSec`를 따로 반환. 기본 `ServerDateMs`=raw(안전).
+- `Set-AgeCorrectedServerDates` 신설: 윈도우 전체에서 raw `Date` span ≤ 2000ms **그리고** `Age>0` 존재일 때만 frozen으로 보고 `ServerDateMs=Date+Age*1000` 적용. 그 외엔 raw 유지. 결과에 `AgeCorrected` bool. `Reduce-Samples` 첫 줄에서 호출.
+- `Get-EffectiveServerDateMs`는 산술 헬퍼로 강등(주석에 "frozen 판정 뒤에만 호출" 명시).
+- 테스트: frozen→`AgeCorrected=true`, **live+Age=6→`AgeCorrected=false` 무과보정** 회귀 추가. 36 passed.
+
+### 검증
+
+같은 PC 실측: `ticket.interpark.com`→`AgeCorrected=false`, 표시−진짜UTC ≈ −0.3s(과보정 사라짐). `nol.interpark.com/ticket`→`AgeCorrected=true`, ≈ +0.4s(여전히 복구). 둘 다 sub-second.
+
+### 주의 (아래 절 정정)
+
+아래 "CDN Age 헤더 보정" 절의 "범용적으로 안전" 결론은 **부분적으로 틀렸다**. 일반 origin(Age 없음)·완전 frozen 캐시는 맞지만, **라이브 Date + 0 아닌 Age** 케이스에서 과보정했다. 이번 조건부화로 교정. (네이비즘 비교: nol에선 이 도구가 정확, ticket에선 v1이 틀리고 네이비즘이 옳았음 → 조건부 규칙이 양쪽 모두 정확.)
+
 ## CDN Age 헤더 보정 (CloudFront frozen-Date 대응) (2026-05-24, Claude)
 
 사용자 보고: `https://nol.interpark.com/ticket`에서 upper-envelope 폴백이 뜨고, HEAD를 몇 초간 반복해도 같은 시각만 반환됨.
