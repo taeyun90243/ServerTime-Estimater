@@ -81,18 +81,7 @@ function Handle-Request {
     param($req, $resp, $state, $webRoot)
     $path = $req.Url.AbsolutePath
     if ($path -eq '/' -or $path -eq '/index.html') {
-        if (-not $state.PageServed) {
-            $state.PageServed = $true
-        } elseif ($state.TargetUrl -and $state.MeasureTimer -and -not $state.MeasureInProgress -and -not $state.MeasureTimer.Enabled) {
-            $state.LastMeasureRequestedAt = Get-PcUtcNow
-            $state.LastRemeasureResult = ''
-            $state.LastRemeasureDeltaMs = $null
-            $state.LastRemeasureAttempts = 0
-            $state.MeasureInProgress = $true
-            $state.Status = 'measuring'
-            Write-LogEvent @{ ev = 'remeasure_requested'; path = $path }
-            $state.MeasureTimer.Start()
-        }
+        $state.PageServed = $true
         Write-StaticFile $resp (Join-Path $webRoot 'index.html') 'text/html; charset=utf-8'
     } elseif ($path -eq '/clock.css') {
         Write-StaticFile $resp (Join-Path $webRoot 'clock.css') 'text/css; charset=utf-8'
@@ -109,11 +98,49 @@ function Handle-Request {
             return
         }
         Set-TargetFromRequest $req $resp $state
+    } elseif ($path -eq '/api/remeasure') {
+        if ($req.HttpMethod -ne 'POST') {
+            $resp.StatusCode = 405
+            Write-JsonResponse $resp @{ ok = $false; error = 'Method Not Allowed' }
+            return
+        }
+        Start-RemeasureFromRequest $resp $state
     } else {
         $resp.StatusCode = 404
         $bytes = [Text.Encoding]::UTF8.GetBytes('Not Found')
         $resp.OutputStream.Write($bytes, 0, $bytes.Length)
     }
+}
+
+function Start-RemeasureFromRequest {
+    param($resp, $state)
+
+    if (-not $state.TargetUrl -or -not $state.LastMeasureAt) {
+        $resp.StatusCode = 409
+        Write-JsonResponse $resp @{ ok = $false; error = '먼저 측정을 완료하세요.' }
+        return
+    }
+    if (-not $state.MeasureTimer) {
+        $resp.StatusCode = 500
+        Write-JsonResponse $resp @{ ok = $false; error = '측정 타이머가 준비되지 않았습니다.' }
+        return
+    }
+    if ($state.MeasureInProgress -or $state.MeasureTimer.Enabled) {
+        Write-JsonResponse $resp @{ ok = $true; alreadyRunning = $true }
+        return
+    }
+
+    $state.LastMeasureRequestedAt = Get-PcUtcNow
+    $state.LastRemeasureFinishedAt = $null
+    $state.LastRemeasureResult = ''
+    $state.LastRemeasureDeltaMs = $null
+    $state.LastRemeasureAttempts = 0
+    $state.PendingTargetChange = $false
+    $state.MeasureInProgress = $true
+    $state.Status = 'measuring'
+    Write-LogEvent @{ ev = 'remeasure_requested'; source = 'button'; host = $state.Host }
+    $state.MeasureTimer.Start()
+    Write-JsonResponse $resp @{ ok = $true }
 }
 
 function Normalize-TargetUrl {

@@ -49,12 +49,36 @@ body {
   cursor: default;
 }
 
-.notice {
-  color: var(--warn);
-  font-size: 13px;
-  font-weight: 600;
+.measure-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   margin: -12px 0 20px;
-  text-align: center;
+}
+.remeasure-button {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.remeasure-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.remeasure-button:disabled {
+  color: #aaa;
+  background: #f6f6f6;
+  cursor: default;
+}
+.duration-hint {
+  color: var(--gray);
+  font-size: 12px;
 }
 
 .clock-face { position: relative; width: 360px; height: 360px; margin: 0 auto; }
