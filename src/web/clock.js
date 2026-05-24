@@ -35,6 +35,8 @@
   let lastRenderPerfMs = null;
   let localReloadRemeasure = false;
   let activeTargetUrl = null;
+  let activeMeasurementUrl = null;
+  let activeMeasureRequestAt = null;
   let appliedMeasureAt = null;
 
   const targetForm = document.getElementById('target-form');
@@ -82,7 +84,7 @@
     const button = targetForm.querySelector('button');
     button.disabled = true;
     remeasureButton.disabled = true;
-    setDurationHint('초기 측정: 예상 약 6초, 최대 20초');
+    setDurationHint('초기 측정: 기본 구간 약 6초, 최대 20초');
     setStatusText('측정 요청 중...', false, true);
     try {
       const res = await fetch('/api/target', {
@@ -115,8 +117,10 @@
   async function requestRemeasure() {
     if (!state || !state.lastMeasureAt || state.status === 'measuring' || state.status === 'queued') return;
     remeasureButton.disabled = true;
-    setDurationHint('재측정: 1회 약 6초, 최대 15초');
+    setDurationHint('재측정: 기본 구간 약 6초, 최대 10초');
     setStatusText('재측정 요청 중...', false, true);
+    resetClockBase();
+    localReloadRemeasure = true;
     try {
       const res = await fetch('/api/remeasure', { method: 'POST', cache: 'no-store' });
       const data = await res.json();
@@ -142,11 +146,11 @@
 
     if (isBusy) {
       const isRemeasure = hasPendingRemeasure() || localReloadRemeasure;
-      setDurationHint(isRemeasure ? '재측정: 1회 약 6초, 최대 15초' : '초기 측정: 예상 약 6초, 최대 20초');
+      setDurationHint(isRemeasure ? '재측정: 기본 구간 약 6초, 최대 10초' : '초기 측정: 기본 구간 약 6초, 최대 20초');
     } else if (hasMeasuredTarget) {
-      setDurationHint('재측정: 1회 약 6초, 최대 15초');
+      setDurationHint('재측정: 기본 구간 약 6초, 최대 10초');
     } else {
-      setDurationHint('초기 측정: 예상 약 6초, 최대 20초');
+      setDurationHint('초기 측정: 기본 구간 약 6초, 최대 20초');
     }
   }
 
@@ -159,13 +163,23 @@
       const lag = (t1 - t0) / 2;
 
       const nextTargetUrl = data.targetUrl || '';
+      const nextMeasurementUrl = data.measurementUrl || '';
       if (activeTargetUrl === null) {
         activeTargetUrl = nextTargetUrl;
+        activeMeasurementUrl = nextMeasurementUrl;
         targetInput.value = activeTargetUrl;
-      } else if (nextTargetUrl !== activeTargetUrl) {
+      } else if (nextTargetUrl !== activeTargetUrl || nextMeasurementUrl !== activeMeasurementUrl) {
         activeTargetUrl = nextTargetUrl;
+        activeMeasurementUrl = nextMeasurementUrl;
         targetInput.value = activeTargetUrl;
         resetClockBase();
+      }
+      const requestAt = data.lastMeasureRequestedAt || null;
+      if (requestAt && requestAt !== activeMeasureRequestAt) {
+        activeMeasureRequestAt = requestAt;
+        if (!data.lastMeasureAt || new Date(requestAt).getTime() > new Date(data.lastMeasureAt).getTime()) {
+          resetClockBase();
+        }
       }
       // 시계 기준점은 최초 표시 또는 실제 반영된 측정(lastMeasureAt 변경) 때만 갱신.
       // ok 응답마다 재기준화하면 response latency 변동이 초침 점프로 보이고,
@@ -175,11 +189,17 @@
       const hasOffsetData = typeof data.offsetMs === 'number' && typeof data.pcSendTimeAtMs === 'number';
       const measureAt = data.lastMeasureAt || null;
       const hasNewAppliedMeasure = !!measureAt && measureAt !== appliedMeasureAt;
+      const serverAtFetch = hasOffsetData ? data.pcSendTimeAtMs + data.offsetMs + lag : null;
+      const currentEstimate = nowEstimateMs();
+      const hasLargeDisplayDrift = (data.status === 'ok' || data.status === 'stale') &&
+                                   serverAtFetch != null &&
+                                   currentEstimate != null &&
+                                   Math.abs(serverAtFetch - currentEstimate) > 500;
       const shouldUpdateBase = ((data.status === 'ok' || data.status === 'stale') && hasNewAppliedMeasure) ||
+                               hasLargeDisplayDrift ||
                                (baseServerMs == null && hasOffsetData && measureAt);
       if (shouldUpdateBase && hasOffsetData) {
-        const serverAtSend = data.pcSendTimeAtMs + data.offsetMs;
-        setClockBase(serverAtSend + lag, t1);
+        setClockBase(serverAtFetch, t1);
         appliedMeasureAt = measureAt;
       }
       state = data;
@@ -236,6 +256,14 @@
     return new Date(state.lastMeasureRequestedAt).getTime() > new Date(state.lastMeasureAt).getTime();
   }
 
+  function isRemeasureUiActive() {
+    return !!(localReloadRemeasure || hasPendingRemeasure());
+  }
+
+  function activeMeasureLabel() {
+    return isRemeasureUiActive() ? '재측정 중... (10초 이내)' : '초기 측정 중... (20초 이내)';
+  }
+
   function render() {
     const perfNow = performance.now();
     if (baseServerMs != null && lastRenderPerfMs != null && Math.abs(slewRemainingMs) > 0.001) {
@@ -256,10 +284,9 @@
       if (!state || state.status === 'idle') {
         setStatusText('측정할 URL을 입력하세요', false, true);
       } else if (state.status === 'queued') {
-        setStatusText('측정 대기 중...', false, true);
+        setStatusText(activeMeasureLabel(), false, true);
       } else if (state.status === 'measuring') {
-        const isRemeasure = hasPendingRemeasure() || localReloadRemeasure;
-        setStatusText(isRemeasure ? '재측정 중... (15초 이내)' : '초기 측정 중... (20초 이내)', false, true);
+        setStatusText(activeMeasureLabel(), false, true);
       } else if (state.status === 'failed') {
         setStatusText('측정 실패 (URL 확인 후 재시도)', true, true);
       }
@@ -304,6 +331,9 @@
     const sampleCount = state.sampleCount || 0;
     const acceptedCount = state.acceptedCount || 0;
     const label = methodLabel(state.method, state.edgeCount, acceptedCount);
+    const measurementNote = state.measurementNote === 'interpark-final-ticket-page'
+      ? '  측정경로: nol.interpark.com/ticket'
+      : '';
     // 교집합 계열의 ±는 "일치 폭"(feasible 영역 반폭)이지 정확도 보장이 아니다.
     // RTT 비대칭 같은 공통 편향은 이 폭에 안 잡힘 → '일치폭'으로 명시.
     const isIntersect = (state.method || '').indexOf('edge-intersect') === 0;
@@ -311,7 +341,7 @@
       ? `일치폭 ±${Math.round(state.ci95Ms || 0)}ms(비대칭 미반영)`
       : `±${Math.round(state.ci95Ms || 0)}ms`;
     document.getElementById('stats').textContent =
-      `측정: ${ago}초 전  RTT ${Math.round(state.rttMedianMs || 0)}ms  ${spreadLabel}  샘플 ${sampleCount}개  방법: ${label}  안전마진 -${Math.round(safetyMs)}ms`;
+      `측정: ${ago}초 전  RTT ${Math.round(state.rttMedianMs || 0)}ms  ${spreadLabel}  샘플 ${sampleCount}개  방법: ${label}  안전마진 -${Math.round(safetyMs)}ms${measurementNote}`;
 
     const ntp = document.getElementById('ntp');
     if (state.ntpInfo) {
@@ -328,9 +358,9 @@
     } else if (state.status === 'idle') {
       setStatusText('측정할 URL을 입력하세요', false, true);
     } else if (state.status === 'queued') {
-      setStatusText('측정 대기 중...', false, true);
+      setStatusText(activeMeasureLabel(), false, true);
     } else if (state.status === 'measuring') {
-      setStatusText(hasPendingRemeasure() || localReloadRemeasure ? '재측정 중... (15초 이내)' : '초기 측정 중... (20초 이내)', false, hasPendingRemeasure() || localReloadRemeasure);
+      setStatusText(activeMeasureLabel(), false, isRemeasureUiActive());
     } else if (state.lastRemeasureResult === 'failed-insufficient-edges') {
       setStatusText('재측정 실패 (edge 부족): 기존값 유지', true, true);
     } else if (state.lastRemeasureResult === 'rejected') {
@@ -507,6 +537,9 @@
     // 요약
     const elapsedTotal = (totalMs / 1000).toFixed(2);
     const label = methodLabel(data.method, edges.length, data.acceptedCount);
+    const measurementNote = data.measurementNote === 'interpark-final-ticket-page'
+      ? ' | 측정경로 nol.interpark.com/ticket'
+      : '';
     const widthPart = (typeof data.intersectWidthMs === 'number' && data.intersectWidthMs > 0)
       ? ` | 교집합 폭 ${Math.round(data.intersectWidthMs)}ms`
       : '';
@@ -516,7 +549,7 @@
       `edge <strong>${edges.length}</strong>개 | ` +
       `총 측정 ${elapsedTotal}초 | ` +
       `RTT median ${Math.round(rttMedian)}ms | ` +
-      `±${Math.round(data.ci95Ms || 0)}ms${widthPart}`;
+      `±${Math.round(data.ci95Ms || 0)}ms${widthPart}${measurementNote}`;
   }
 
   function showTooltip(evt, s, t0) {

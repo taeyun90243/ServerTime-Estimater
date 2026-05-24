@@ -337,7 +337,7 @@ ci95 = t × σ / √N</pre>
   <div class="card" id="interpolate">
     <h2>10. 브라우저 보간</h2>
 
-    <p>측정은 6~15초 걸리지만 화면은 매초 갱신해야 한다. 매번 측정 안 함. 기준점 하나를 잡고 브라우저 <code>performance.now()</code> 증가분으로 보간.</p>
+    <p>초기 측정은 최대 20초, 재측정은 최대 10초 안에서 수행되지만 화면은 매초 갱신해야 한다. 매번 측정 안 함. 기준점 하나를 잡고 브라우저 <code>performance.now()</code> 증가분으로 보간.</p>
 
     <h3>10.1 기준점 설정</h3>
     <p>측정 완료(<code>status === 'ok'</code>) 시 <code>/api/state</code> 응답에서:</p>

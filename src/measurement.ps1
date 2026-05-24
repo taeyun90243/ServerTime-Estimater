@@ -77,6 +77,28 @@ function Test-NaverClockUrl {
     }
 }
 
+function Resolve-MeasurementTarget {
+    param([Parameter(Mandatory)][string]$Url)
+
+    $uri = [Uri]$Url
+    $targetHost = $uri.Host.ToLowerInvariant()
+    if ($targetHost -in @('ticket.interpark.com', 'tickets.interpark.com', 'nol.interpark.com')) {
+        $cacheBust = [Guid]::NewGuid().ToString('N').Substring(0, 10)
+        $canonicalUrl = 'https://nol.interpark.com/ticket'
+        return [PSCustomObject]@{
+            TargetUrl       = $canonicalUrl
+            MeasurementUrl  = "${canonicalUrl}?t=$cacheBust"
+            MeasurementNote = 'interpark-final-ticket-page'
+        }
+    }
+
+    return [PSCustomObject]@{
+        TargetUrl       = $Url
+        MeasurementUrl  = $Url
+        MeasurementNote = ''
+    }
+}
+
 function Get-OffsetMs {
     param(
         [Parameter(Mandatory)][double]$ServerDateMs,
@@ -594,7 +616,7 @@ function Invoke-AdaptiveMultiSample {
     #
     # MaxTotalMs > 0이면 전체 측정의 하드 데드라인. 데드라인 직전(현재 timeout만큼
     # 여유를 두고)부터 새 요청을 시작하지 않아 in-flight 1건까지 포함해 MaxTotalMs를
-    # 넘지 않는다. 재측정(15초 캡)에서 사용. 0이면 무제한(첫 측정·타겟 변경).
+    # 넘지 않는다. 재측정 하드캡에서 사용. 0이면 무제한(첫 측정·타겟 변경).
     param(
         [Parameter(Mandatory)][string]$Url,
         [int]$IntervalMs = 50,

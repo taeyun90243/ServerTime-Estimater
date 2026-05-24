@@ -39,6 +39,27 @@ Describe 'Measurement pure functions' {
         Get-EffectiveServerDateMs -DateHeader 'Sun, 24 May 2026 08:44:13 GMT' -AgeHeader '' | Should Be $base
         Get-EffectiveServerDateMs -DateHeader 'Sun, 24 May 2026 08:44:13 GMT' -AgeHeader '0' | Should Be $base
     }
+
+    It 'Resolve-MeasurementTarget routes Interpark ticket hosts to the final ticket page' {
+        $r = Resolve-MeasurementTarget -Url 'https://ticket.interpark.com/'
+        $r.TargetUrl | Should Be 'https://nol.interpark.com/ticket'
+        $r.MeasurementUrl | Should Match '^https://nol\.interpark\.com/ticket\?t=[0-9a-f]{10}$'
+        $r.MeasurementNote | Should Be 'interpark-final-ticket-page'
+    }
+
+    It 'Resolve-MeasurementTarget canonicalizes nol.interpark.com root to the ticket page' {
+        $r = Resolve-MeasurementTarget -Url 'https://nol.interpark.com/'
+        $r.TargetUrl | Should Be 'https://nol.interpark.com/ticket'
+        $r.MeasurementUrl | Should Match '^https://nol\.interpark\.com/ticket\?t=[0-9a-f]{10}$'
+        $r.MeasurementNote | Should Be 'interpark-final-ticket-page'
+    }
+
+    It 'Resolve-MeasurementTarget keeps non-Interpark URLs unchanged' {
+        $r = Resolve-MeasurementTarget -Url 'https://example.com/path'
+        $r.TargetUrl | Should Be 'https://example.com/path'
+        $r.MeasurementUrl | Should Be 'https://example.com/path'
+        $r.MeasurementNote | Should Be ''
+    }
 }
 
 Describe 'Sample reduction algorithm' {

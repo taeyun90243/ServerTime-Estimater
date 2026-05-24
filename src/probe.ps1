@@ -21,13 +21,15 @@ $url = if ($TargetUrl) { Normalize-TargetUrl -Url $TargetUrl } else { '' }
 $webRoot = Join-Path $PSScriptRoot 'web'
 
 $state = New-StateStore
-$state.TargetUrl = $url
 if ($url) {
-    $state.Host = ([Uri]$url).Host
+    Set-TargetState -State $state -Url $url -ForceInitialMeasure $true
     $state.Status = 'measuring'
-    Write-Host "초기 측정 (20초 이내): $url"
+    Write-Host "초기 측정 (20초 이내): $($state.TargetUrl)"
+    if ($state.MeasurementUrl -ne $state.TargetUrl) {
+        Write-Host "측정 경로: $($state.MeasurementUrl)" -ForegroundColor DarkGray
+    }
     try {
-        $result = Invoke-AdaptiveMultiSample -Url $url -MaxTotalMs 20000
+        $result = Invoke-AdaptiveMultiSample -Url $state.MeasurementUrl -MaxTotalMs 20000
         $state.OffsetMs      = $result.OffsetMs
         $state.RttMedianMs   = $result.RttMedianMs
         $state.SigmaMs       = $result.SigmaMs
@@ -39,10 +41,13 @@ if ($url) {
         $state.LastSamples   = $result.Samples
         $state.LastEdges     = $result.Edges
         $state.LastMeasureAt = Get-PcUtcNow
+        $state.PendingTargetChange = $false
+        $state.LastError     = ''
         $state.Status        = 'ok'
         Write-Host "초기 오프셋: $([Math]::Round($result.OffsetMs,1)) ms (±$([Math]::Round($result.Ci95Ms,1)))"
         Write-LogEvent @{
             ev = 'measure'; host = $state.Host
+            targetUrl = $state.TargetUrl; measurementUrl = $state.MeasurementUrl; measurementNote = $state.MeasurementNote
             offsetMs = $result.OffsetMs; sigmaMs = $result.SigmaMs
             rttMedianMs = $result.RttMedianMs
             sampleCount = $result.SampleCount; acceptedCount = $result.AcceptedCount
@@ -51,7 +56,7 @@ if ($url) {
     } catch {
         Write-Host "초기 측정 실패: $_" -ForegroundColor Red
         $state.Status = 'failed'
-        Write-LogEvent @{ ev = 'measure_failed'; reason = "$_" }
+        Write-LogEvent @{ ev = 'measure_failed'; targetUrl = $state.TargetUrl; measurementUrl = $state.MeasurementUrl; reason = "$_" }
     }
 } else {
     Write-Host "브라우저에서 측정할 URL을 입력하세요." -ForegroundColor Cyan
@@ -82,16 +87,21 @@ $measureSubscription = Register-ObjectEvent `
     -MessageData $state `
     -Action {
         $s = $Event.MessageData
+        if (-not (Get-Command Invoke-AdaptiveMultiSample -ErrorAction SilentlyContinue)) {
+            . "$($s.ScriptRoot)\anchor.ps1"
+            . "$($s.ScriptRoot)\measurement.ps1"
+            . "$($s.ScriptRoot)\logger.ps1"
+        }
         if (-not $s.TargetUrl) {
             $s.Status = 'idle'
             $s.MeasureInProgress = $false
             return
         }
-        if ($s.Status -eq 'measuring' -and -not $s.MeasureInProgress) { return }
+        if ($s.MeasureInProgress) { return }
         $s.MeasureInProgress = $true
         $s.Status = 'measuring'
-        Write-LogEvent @{ ev = 'measure_started'; host = $s.Host }
         try {
+            try { Write-LogEvent @{ ev = 'measure_started'; host = $s.Host; targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl } } catch {}
             $previousOffsetMs = [double]$s.OffsetMs
             $isTargetChange = [bool]$s.PendingTargetChange -or (-not $s.LastMeasureAt)
             $accepted = $false
@@ -100,10 +110,10 @@ $measureSubscription = Register-ObjectEvent `
             $lastResult = $null
             $lastDeltaMs = $null
 
-            # 재측정은 15초 하드캡, 첫 측정/타겟 변경은 20초 하드캡.
+            # 재측정은 10초 하드캡, 첫 측정/타겟 변경은 20초 하드캡.
             # 재측정 캡은 2회 시도 전체에 공유.
             $InitialMeasureBudgetMs = 20000
-            $RemeasureBudgetMs = 15000
+            $RemeasureBudgetMs = 10000
             $budgetSw = [System.Diagnostics.Stopwatch]::StartNew()
 
             for ($attempt = 1; $attempt -le 2; $attempt++) {
@@ -116,7 +126,8 @@ $measureSubscription = Register-ObjectEvent `
                     $maxTotalMs = [int][Math]::Max(0, $remainingMs)
                 }
 
-                $r = Invoke-AdaptiveMultiSample -Url $s.TargetUrl -MaxTotalMs $maxTotalMs
+                $measurementUrl = if ($s.MeasurementUrl) { $s.MeasurementUrl } else { $s.TargetUrl }
+                $r = Invoke-AdaptiveMultiSample -Url $measurementUrl -MaxTotalMs $maxTotalMs
                 $lastResult = $r
                 $lastDeltaMs = [Math]::Abs([double]$r.OffsetMs - $previousOffsetMs)
                 $s.LastRemeasureAttempts = $attempt
@@ -131,6 +142,7 @@ $measureSubscription = Register-ObjectEvent `
                 # 'delta-exceeded' → 재시도
                 Write-LogEvent @{
                     ev = 'remeasure_retry'; host = $s.Host
+                    targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl
                     attempt = $attempt; deltaMs = $lastDeltaMs
                     previousOffsetMs = $previousOffsetMs; newOffsetMs = $r.OffsetMs
                     thresholdMs = 100
@@ -154,9 +166,11 @@ $measureSubscription = Register-ObjectEvent `
                 $s.LastMeasureAt = Get-PcUtcNow
                 $s.LastRemeasureResult = 'accepted'
                 $s.PendingTargetChange = $false
+                $s.LastError     = ''
                 $s.Status        = 'ok'
                 Write-LogEvent @{
                     ev = 'measure'; host = $s.Host
+                    targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl; measurementNote = $s.MeasurementNote
                     offsetMs = $lastResult.OffsetMs; sigmaMs = $lastResult.SigmaMs
                     rttMedianMs = $lastResult.RttMedianMs
                     sampleCount = $lastResult.SampleCount; acceptedCount = $lastResult.AcceptedCount
@@ -169,6 +183,7 @@ $measureSubscription = Register-ObjectEvent `
                 $s.Status = 'ok'
                 Write-LogEvent @{
                     ev = 'remeasure_kept_small_delta'; host = $s.Host
+                    targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl
                     attempt = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
                     thresholdMs = 30
@@ -179,6 +194,7 @@ $measureSubscription = Register-ObjectEvent `
                 $s.Status = 'ok'
                 Write-LogEvent @{
                     ev = 'remeasure_failed_insufficient'; host = $s.Host
+                    targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl
                     acceptedCount = [int]$lastResult.AcceptedCount; method = $lastResult.Method
                     previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
                 }
@@ -187,6 +203,7 @@ $measureSubscription = Register-ObjectEvent `
                 $s.Status = 'ok'
                 Write-LogEvent @{
                     ev = 'remeasure_rejected'; host = $s.Host
+                    targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl
                     attempts = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
                     thresholdMs = 100
@@ -196,8 +213,15 @@ $measureSubscription = Register-ObjectEvent `
             $s.MeasureInProgress = $false
         } catch {
             $s.MeasureInProgress = $false
-            $s.Status = 'failed'
-            Write-LogEvent @{ ev = 'measure_failed'; reason = "$_" }
+            $s.LastError = "$_"
+            if ($s.LastMeasureAt) {
+                $s.LastRemeasureResult = 'failed'
+                $s.LastRemeasureFinishedAt = Get-PcUtcNow
+                $s.Status = 'ok'
+            } else {
+                $s.Status = 'failed'
+            }
+            try { Write-LogEvent @{ ev = 'measure_failed'; targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl; reason = "$_" } } catch {}
         }
     }
 $state.MeasureTimer = $measureTimer
@@ -212,6 +236,11 @@ $ntpSubscription = Register-ObjectEvent `
     -MessageData $state `
     -Action {
         $s = $Event.MessageData
+        if (-not (Get-Command Get-NtpInfo -ErrorAction SilentlyContinue)) {
+            . "$($s.ScriptRoot)\anchor.ps1"
+            . "$($s.ScriptRoot)\ntp.ps1"
+            . "$($s.ScriptRoot)\logger.ps1"
+        }
         try {
             $n = Get-NtpInfo
             $s.NtpInfo = @{ skewMs = $n.SkewMs; rttMs = $n.RttMs; at = $n.At.ToString('o') }

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>인터파크 서버시간 측정 정리</title>
+<style>
+  :root { --green:#03c75a; --red:#c62828; --ink:#222; --muted:#666; --line:#e5e7eb; --bg:#fafafa; --card:#fff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif; line-height:1.7; }
+  main { max-width:920px; margin:36px auto; padding:0 20px 48px; }
+  h1 { margin:0 0 8px; padding-bottom:12px; border-bottom:3px solid var(--green); font-size:28px; }
+  h2 { margin:0 0 12px; font-size:21px; color:var(--green); }
+  h3 { margin:24px 0 8px; font-size:17px; }
+  p { margin:8px 0; }
+  code { padding:2px 6px; border-radius:4px; background:#f3f4f6; font-family:Consolas,monospace; font-size:13px; }
+  pre { padding:14px 16px; border-radius:6px; background:#f3f4f6; overflow:auto; font-family:Consolas,monospace; font-size:13px; }
+  table { width:100%; border-collapse:collapse; margin:12px 0; font-size:14px; }
+  th,td { border:1px solid var(--line); padding:8px 10px; vertical-align:top; }
+  th { background:#f3f4f6; text-align:left; }
+  .card { margin:20px 0; padding:22px 26px; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+  .note { margin:14px 0; padding:12px 14px; border-left:4px solid var(--green); background:#f0fbf4; border-radius:0 6px 6px 0; }
+  .warn { border-left-color:var(--red); background:#fff1f1; }
+  .muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>인터파크 서버시간 측정 정리</h1>
+  <p class="muted">최종 업데이트: 2026-05-25 KST. 대상: <code>ticket.interpark.com</code>, <code>tickets.interpark.com</code>, <code>nol.interpark.com</code>.</p>
+
+  <section class="card">
+    <h2>1. 결론</h2>
+    <p>인터파크 티켓 관련 입력은 모두 같은 canonical 측정 대상으로 정규화한다.</p>
+    <pre>입력: ticket.interpark.com
+입력: tickets.interpark.com
+입력: nol.interpark.com
+
+표시/대상 URL: https://nol.interpark.com/ticket
+실제 측정 URL: https://nol.interpark.com/ticket?t=&lt;random&gt;</pre>
+    <p><code>?t=...</code>는 CloudFront/브라우저/중간 캐시 영향을 줄이기 위한 캐시버스터다. 네이비즘에서도 <code>ticket.interpark.com</code>과 <code>nol.interpark.com</code>이 사실상 같은 서비스 시간처럼 보였기 때문에, 원본 입력 문자열보다 최종 티켓 페이지 경로를 기준으로 삼는다.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. 왜 이렇게 하는가</h2>
+    <table>
+      <thead><tr><th>관찰</th><th>의미</th></tr></thead>
+      <tbody>
+        <tr><td><code>ticket.interpark.com</code>은 실제 서비스 흐름에서 <code>nol.interpark.com/ticket</code> 쪽으로 이어진다.</td><td>입력 도메인 raw <code>Date</code>만 보면 네이비즘/실서비스 흐름과 달라질 수 있다.</td></tr>
+        <tr><td>네이비즘에서 <code>ticket.interpark.com</code>과 <code>nol.interpark.com</code>이 거의 같은 값으로 표시된다.</td><td>네이비즘도 개별 raw 도메인보다 서비스 단위/최종 경로 기준에 가깝게 보인다.</td></tr>
+        <tr><td><code>nol.interpark.com/ticket?t=...</code> 최근 응답은 <code>X-Cache: Miss</code>, <code>Age</code> 없음, <code>Cache-Control: no-store</code>가 자주 보인다.</td><td>이 경우 <code>Date + Age</code>가 아니라 raw <code>Date</code> 기준으로 edge를 잡는 것이 맞다.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>3. Age 보정 규칙</h2>
+    <p>인터파크에서 한동안 혼선이 있었던 부분이다. 규칙은 단순하다.</p>
+    <pre>X-Cache: Miss + Age 없음
+→ Date 그대로 사용
+
+Date가 매초 움직임
+→ Date 그대로 사용, Age가 있어도 더하지 않음
+
+Date가 측정 윈도우 내내 멈춤 + Age&gt;0
+→ frozen cache로 보고 Date + Age 사용</pre>
+    <div class="note warn">
+      <strong>주의.</strong> 라이브 <code>Date</code>에 <code>Age</code>를 무조건 더하면 샘플 전체가 정수 초만큼 미래로 평행이동한다. 이때 edge는 서로 잘 맞아 보여도 화면은 몇 초 빠를 수 있다.
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>4. +5~6초 빠르게 보였던 실제 원인</h2>
+    <p>마지막으로 확인된 핵심 원인은 서버 측정값 자체가 아니라 브라우저 UI 기준점이었다.</p>
+    <ol>
+      <li>서버 <code>/api/state</code>는 정상 offset을 내려줬다.</li>
+      <li>브라우저 <code>clock.js</code>는 한 번 잡은 <code>baseServerMs</code>를 <code>performance.now()</code>로 계속 굴린다.</li>
+      <li>이전 잘못된 기준점이 잡힌 상태에서 같은 <code>lastMeasureAt</code>이면 새 state를 다시 적용하지 않았다.</li>
+      <li>그래서 F5를 누르면 JS 메모리가 초기화되어 정상으로 보였고, 버튼만 누르면 오래된 +5~6초 기준점이 남았다.</li>
+    </ol>
+    <p>수정 사항:</p>
+    <ul>
+      <li><code>targetUrl</code>, <code>measurementUrl</code>, <code>lastMeasureRequestedAt</code> 변경 시 기존 <code>baseServerMs</code> 리셋</li>
+      <li>같은 <code>lastMeasureAt</code>이라도 화면 추정치와 <code>/api/state</code> 기준 시각이 500ms 이상 다르면 강제 재기준화</li>
+      <li>재측정 버튼을 누르면 즉시 기존 UI 기준점 리셋</li>
+      <li>수동 재측정은 delta 보호 로직으로 새 값을 버리지 않고 명시적 새 측정으로 반영</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>5. 현재 기대 동작</h2>
+    <table>
+      <thead><tr><th>동작</th><th>기대 결과</th></tr></thead>
+      <tbody>
+        <tr><td><code>nol.interpark.com</code> 입력 후 측정</td><td>입력창/상태가 <code>https://nol.interpark.com/ticket</code> 기준으로 바뀌고 새 <code>?t=...</code> 경로를 측정한다.</td></tr>
+        <tr><td>재측정 버튼 클릭</td><td>UI는 <code>재측정 중...</code>으로 표시하고, 새 <code>measurementUrl</code>로 샘플링한다.</td></tr>
+        <tr><td>재측정 성공</td><td>기존 값과 차이가 커도 수동 요청이므로 새 offset을 반영한다.</td></tr>
+        <tr><td>재측정 실패</td><td>기존 offset은 유지하고 <code>lastError</code>에 실패 사유를 남긴다.</td></tr>
+        <tr><td>F5 없이 기다림</td><td>1초 폴링 중 화면 기준과 서버 state가 500ms 이상 다르면 자동으로 재동기화한다.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>6. 다른 사이트에 적용할 원칙</h2>
+    <p>대형 티켓/신청 사이트는 입력 도메인, 리다이렉트 최종 URL, CDN 응답, 내부 API 기준이 다를 수 있다. 사이트별로 아래 후보를 비교하고 필요할 때 canonical 매핑을 추가한다.</p>
+    <pre>1. 입력 URL raw Date
+2. 리다이렉트 최종 200 OK Date
+3. 캐시버스터를 붙인 최종 URL Date
+4. 서비스별 알려진 페이지/대기열/API 경로 Date
+5. 네이비즘 HTML에 박힌 thisTime2/mgap 결과와의 차이</pre>
+  </section>
+</main>
+</body>
+</html>
