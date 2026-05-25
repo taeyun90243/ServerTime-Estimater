@@ -286,7 +286,12 @@
   function hasPendingRemeasure() {
     if (!state || !state.lastMeasureRequestedAt) return false;
     if (!state.lastMeasureAt) return false;
-    return new Date(state.lastMeasureRequestedAt).getTime() > new Date(state.lastMeasureAt).getTime();
+    const reqT = new Date(state.lastMeasureRequestedAt).getTime();
+    // 요청이 이미 끝났으면(반영/유지/거부/실패 무관) 더 이상 pending 아님.
+    // 이게 없으면 실패·기존값유지처럼 lastMeasureAt이 안 바뀐 경우 영원히 pending으로 남아
+    // "재측정 요청됨..."에서 멈춘다.
+    if (state.lastRemeasureFinishedAt && new Date(state.lastRemeasureFinishedAt).getTime() >= reqT) return false;
+    return reqT > new Date(state.lastMeasureAt).getTime();
   }
 
   function isRemeasureUiActive() {
@@ -396,6 +401,10 @@
       setStatusText(activeMeasureLabel(), false, true);
     } else if (state.status === 'measuring') {
       setStatusText(activeMeasureLabel(), false, isRemeasureUiActive());
+    } else if (state.lastRemeasureResult === 'fast') {
+      setStatusText('⚡ 빠른 측정 완료 (정확도 낮음)', false, true);
+    } else if (state.lastRemeasureResult === 'failed') {
+      setStatusText('측정 실패: 기존값 유지', true, true);
     } else if (state.lastRemeasureResult === 'failed-insufficient-edges') {
       setStatusText('재측정 실패 (edge 부족): 기존값 유지', true, true);
     } else if (state.lastRemeasureResult === 'rejected') {
@@ -406,6 +415,8 @@
       setStatusText(`재측정 차이 ${delta}ms: 기존값 유지`, false, true);
     } else if (state.lastRemeasureResult === 'accepted' && state.lastRemeasureAttempts > 1) {
       setStatusText('재측정 완료 (2회차 반영)', false, true);
+    } else if (localFastMeasure) {
+      setStatusText('빠른 측정 요청됨...', false, true);
     } else if (hasPendingRemeasure() || localReloadRemeasure) {
       setStatusText(localReloadRemeasure ? '새로고침중... 재측정 확인 중' : '재측정 요청됨...', false, true);
     } else {

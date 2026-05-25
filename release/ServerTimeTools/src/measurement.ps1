@@ -77,6 +77,28 @@ function Test-NaverClockUrl {
     }
 }
 
+function Resolve-MeasurementTarget {
+    param([Parameter(Mandatory)][string]$Url)
+
+    $uri = [Uri]$Url
+    $targetHost = $uri.Host.ToLowerInvariant()
+    if ($targetHost -in @('ticket.interpark.com', 'tickets.interpark.com', 'nol.interpark.com')) {
+        $cacheBust = [Guid]::NewGuid().ToString('N').Substring(0, 10)
+        $canonicalUrl = 'https://nol.interpark.com/ticket'
+        return [PSCustomObject]@{
+            TargetUrl       = $canonicalUrl
+            MeasurementUrl  = "${canonicalUrl}?t=$cacheBust"
+            MeasurementNote = 'interpark-final-ticket-page'
+        }
+    }
+
+    return [PSCustomObject]@{
+        TargetUrl       = $Url
+        MeasurementUrl  = $Url
+        MeasurementNote = ''
+    }
+}
+
 function Get-OffsetMs {
     param(
         [Parameter(Mandatory)][double]$ServerDateMs,
@@ -594,7 +616,7 @@ function Invoke-AdaptiveMultiSample {
     #
     # MaxTotalMs > 0이면 전체 측정의 하드 데드라인. 데드라인 직전(현재 timeout만큼
     # 여유를 두고)부터 새 요청을 시작하지 않아 in-flight 1건까지 포함해 MaxTotalMs를
-    # 넘지 않는다. 재측정(15초 캡)에서 사용. 0이면 무제한(첫 측정·타겟 변경).
+    # 넘지 않는다. 재측정 하드캡에서 사용. 0이면 무제한(첫 측정·타겟 변경).
     param(
         [Parameter(Mandatory)][string]$Url,
         [int]$IntervalMs = 50,
@@ -606,7 +628,10 @@ function Invoke-AdaptiveMultiSample {
         [int]$ExtendWindowMs = 3000,
         [int]$MaxExtensions = 3,
         [int]$DefaultTimeoutSec = 5,
-        [int]$MaxTotalMs = 0
+        [int]$MaxTotalMs = 0,
+        # 성공 샘플이 목표 Count의 이 비율 미만이면 throw. 빠른 측정은 낮게 줘서
+        # 까다로운(느리고 들쭉날쭉한) 서버에서도 적은 샘플로 거친 결과라도 내게 한다.
+        [double]$MinSampleFraction = 0.5
     )
     $samples = New-Object System.Collections.ArrayList
     $useNaverClockApi = Test-NaverClockUrl -Url $Url
@@ -650,7 +675,9 @@ function Invoke-AdaptiveMultiSample {
         if ($i -lt $count - 1) { Start-Sleep -Milliseconds $IntervalMs }
     }
 
-    if ($samples.Count -lt [int]($count * 0.5)) {
+    # 최소 2샘플은 있어야 edge 계산(인접 비교)이 가능.
+    $minSamples = [Math]::Max(2, [int]($count * $MinSampleFraction))
+    if ($samples.Count -lt $minSamples) {
         throw "Too many failed samples: $($samples.Count)/$count"
     }
     if ($useNaverClockApi) {

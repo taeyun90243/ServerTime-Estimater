@@ -52,6 +52,7 @@
       <li><a href="#measure">측정하기</a></li>
       <li><a href="#screen">화면 보는 법</a></li>
       <li><a href="#remeasure">재측정 버튼</a></li>
+      <li><a href="#fast">빠른 측정 버튼</a></li>
       <li><a href="#interpark">인터파크 입력</a></li>
       <li><a href="#trouble">문제 해결</a></li>
       <li><a href="#limits">주의사항</a></li>
@@ -79,6 +80,10 @@
       <li>기본 측정 구간은 약 6초입니다. 다만 사전 확인, 느린 응답, 재시도, 추가 샘플링 때문에 실제 완료까지는 더 걸릴 수 있습니다.</li>
       <li>완료되면 큰 시계가 해당 사이트의 추정 서버시간으로 움직입니다.</li>
     </ol>
+
+    <div class="note">
+      측정 종류별 최대 시간(버튼 옆 안내줄에도 표시): <strong>측정 최대 20초 · 재측정 최대 15초 · 빠른 측정 최대 5초</strong>. 더 오래 걸리는 쪽일수록 더 정확합니다.
+    </div>
 
     <h3>주소 입력 예시</h3>
     <pre>ticket.interpark.com
@@ -120,10 +125,11 @@ https://naver.com/</pre>
       <li>새 측정이 실패하면 기존 측정값은 유지하고 실패 사유만 남깁니다.</li>
     </ol>
 
-    <p>재측정도 새로 샘플을 모으는 과정입니다. 기본 측정 구간은 약 6초이고, 최대 10초 안에서 끊습니다. 티켓 오픈 직전에는 누르지 않는 것이 좋습니다.</p>
+    <p>재측정도 새로 샘플을 모으는 과정입니다. 기본 측정 구간은 약 6초이고, 최대 15초 안에서 끊습니다. 티켓 오픈 직전에는 누르지 않는 것이 좋습니다.</p>
 
     <h3>반영 기준</h3>
     <ul>
+      <li>측정에 쓸 만한 신호(edge)가 <code>5개 미만</code>이면 실패로 보고 기존값을 유지합니다.</li>
       <li>기존값과 차이가 <code>30ms 이하</code>이면 흔들림으로 보고 기존값을 유지합니다.</li>
       <li><code>31ms~100ms</code> 차이면 새 측정값을 반영합니다.</li>
       <li><code>100ms 초과</code> 차이면 한 번 더 측정합니다. 두 번째도 100ms를 넘으면 기존값을 유지합니다.</li>
@@ -131,8 +137,37 @@ https://naver.com/</pre>
     </ul>
   </section>
 
+  <section class="card" id="fast">
+    <h2>5. 빠른 측정 버튼</h2>
+    <p><code>⚡ 빠른 측정</code>은 <strong>정확도를 많이 포기하는 대신 최대 5초 안에</strong> 끝내는 측정입니다. 20초를 기다리기 어려울 때 씁니다.</p>
+
+    <h3>일반 측정과의 차이</h3>
+    <table>
+      <thead><tr><th></th><th>측정 / 재측정</th><th>빠른 측정</th></tr></thead>
+      <tbody>
+        <tr><td>최대 시간</td><td>20초 / 15초</td><td><strong>5초</strong></td></tr>
+        <tr><td>정확도(대략)</td><td>±30~80ms</td><td><strong>±100~300ms</strong>(신호 없으면 ±500ms)</td></tr>
+        <tr><td>실패 시 처리</td><td>edge 부족이면 기존값 유지</td><td>결과가 적어도 그대로 반영(덮어쓰기)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>기대 동작</h3>
+    <ol>
+      <li>버튼을 누르면 화면이 <code>빠른 측정 중... (최대 5초)</code>으로 바뀝니다.</li>
+      <li><strong>최근에 측정한 값(5분 이내)이 있으면</strong> "덮어쓸까요?" 확인창이 먼저 뜹니다. 확인을 눌러야 진행됩니다.</li>
+      <li>측정이 오래되었거나 아직 측정 전이면 확인 없이 바로 측정합니다.</li>
+      <li>완료되면 통계줄에 <code>⚡ 빠른 측정 · … (정확도 낮음)</code>으로 표시됩니다.</li>
+    </ol>
+
+    <div class="note warn">
+      빠른 측정은 정밀 측정값이 있어도 더 부정확한 값으로 <strong>덮어씁니다</strong>. 안전장치는 확인창과 "정확도 낮음" 표시뿐입니다. <strong>티켓 오픈 직전에는 쓰지 마세요.</strong> 정확도가 필요하면 일반 <code>측정</code>을 쓰세요.
+    </div>
+
+    <p class="muted">빠른 측정 다음에 F5로 새로고침하면 다시 일반(15초) 정밀 측정 방식으로 돌아갑니다.</p>
+  </section>
+
   <section class="card" id="interpark">
-    <h2>5. 인터파크 입력</h2>
+    <h2>6. 인터파크 입력</h2>
     <p>인터파크 티켓 관련 주소는 자동으로 같은 측정 주소로 정리됩니다.</p>
 
     <pre>입력 가능:
@@ -154,7 +189,7 @@ https://nol.interpark.com/ticket</pre>
   </section>
 
   <section class="card" id="trouble">
-    <h2>6. 문제 해결</h2>
+    <h2>7. 문제 해결</h2>
 
     <h3>측정 실패가 뜹니다</h3>
     <ul>
@@ -189,7 +224,7 @@ https://nol.interpark.com/ticket</pre>
   </section>
 
   <section class="card" id="limits">
-    <h2>7. 주의사항</h2>
+    <h2>8. 주의사항</h2>
     <ul>
       <li>이 도구는 대상 사이트가 응답에 담아 보내는 서버시간을 기준으로 합니다. 실제 예매/신청 판정 서버가 같은 시계를 쓴다는 보장은 없습니다.</li>
       <li>네트워크 지연이 불안정하면 오차가 커질 수 있습니다.</li>

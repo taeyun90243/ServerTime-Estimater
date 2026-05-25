@@ -628,7 +628,10 @@ function Invoke-AdaptiveMultiSample {
         [int]$ExtendWindowMs = 3000,
         [int]$MaxExtensions = 3,
         [int]$DefaultTimeoutSec = 5,
-        [int]$MaxTotalMs = 0
+        [int]$MaxTotalMs = 0,
+        # 성공 샘플이 목표 Count의 이 비율 미만이면 throw. 빠른 측정은 낮게 줘서
+        # 까다로운(느리고 들쭉날쭉한) 서버에서도 적은 샘플로 거친 결과라도 내게 한다.
+        [double]$MinSampleFraction = 0.5
     )
     $samples = New-Object System.Collections.ArrayList
     $useNaverClockApi = Test-NaverClockUrl -Url $Url
@@ -672,7 +675,9 @@ function Invoke-AdaptiveMultiSample {
         if ($i -lt $count - 1) { Start-Sleep -Milliseconds $IntervalMs }
     }
 
-    if ($samples.Count -lt [int]($count * 0.5)) {
+    # 최소 2샘플은 있어야 edge 계산(인접 비교)이 가능.
+    $minSamples = [Math]::Max(2, [int]($count * $MinSampleFraction))
+    if ($samples.Count -lt $minSamples) {
         throw "Too many failed samples: $($samples.Count)/$count"
     }
     if ($useNaverClockApi) {

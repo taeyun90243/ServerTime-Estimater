@@ -110,7 +110,11 @@ $measureSubscription = Register-ObjectEvent `
                 # 5초 budget 안에서 probe가 실행되게 한다(기본 5초면 reserve==budget이라
                 # 첫 probe도 못 돌리고 "All initial RTT probes failed"로 죽는다). 적응형
                 # timeout도 ≤2초로 묶여 5초 cap 유지.
-                $r = Invoke-AdaptiveMultiSample -Url $measurementUrl -TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000 -DefaultTimeoutSec 2
+                # MinSampleFraction=0.15: 느리고 들쭉날쭉한 서버(예: den08.inames.kr)에서
+                # 짧은 timeout 탓에 샘플 절반이 실패해도 throw하지 말고 적은 샘플로 거친
+                # 결과(보통 upper-envelope/소수 edge)라도 낸다. 빠른 측정의 취지(정확도
+                # 포기, 일단 빨리 뭐라도)에 맞춤.
+                $r = Invoke-AdaptiveMultiSample -Url $measurementUrl -TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000 -DefaultTimeoutSec 2 -MinSampleFraction 0.15
                 $s.OffsetMs = $r.OffsetMs; $s.RttMedianMs = $r.RttMedianMs; $s.SigmaMs = $r.SigmaMs
                 $s.Ci95Ms = $r.Ci95Ms; $s.SampleCount = $r.SampleCount; $s.AcceptedCount = $r.AcceptedCount
                 $s.Method = $r.Method; $s.IntersectWidthMs = $r.IntersectWidthMs
