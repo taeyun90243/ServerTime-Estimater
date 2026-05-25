@@ -51,32 +51,40 @@ body {
 
 .measure-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px 10px;
   margin: -12px 0 20px;
 }
-.remeasure-button {
+.remeasure-button,
+.fast-measure-button {
   height: 30px;
-  padding: 0 12px;
+  padding: 0 14px;
   border: 1px solid #ddd;
   border-radius: 6px;
   background: #fff;
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
 }
-.remeasure-button:hover:not(:disabled) {
+.remeasure-button:hover:not(:disabled),
+.fast-measure-button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
 }
-.remeasure-button:disabled {
+.remeasure-button:disabled,
+.fast-measure-button:disabled {
   color: #aaa;
   background: #f6f6f6;
   cursor: default;
 }
 .duration-hint {
+  flex-basis: 100%;
+  text-align: center;
   color: var(--gray);
   font-size: 12px;
 }

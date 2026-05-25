@@ -6,7 +6,11 @@ function New-StateStore {
     return [hashtable]::Synchronized(@{
         Host          = ''
         TargetUrl     = ''
+        MeasurementUrl = ''
+        MeasurementNote = ''
         PendingTargetChange = $false
+        MeasureMode   = 'normal'
+        LastMeasureMode = 'normal'
         OffsetMs      = 0.0
         LastMeasureAt = $null
         LastMeasureRequestedAt = $null
@@ -14,6 +18,7 @@ function New-StateStore {
         LastRemeasureResult = ''
         LastRemeasureDeltaMs = $null
         LastRemeasureAttempts = 0
+        LastError     = ''
         MeasureInProgress = $false
         PageServed    = $false
         RttMedianMs   = 0.0
@@ -27,6 +32,7 @@ function New-StateStore {
         LastEdges     = @()
         Status        = 'idle'
         NtpInfo       = $null
+        ScriptRoot    = $PSScriptRoot
     })
 }
 
@@ -105,6 +111,13 @@ function Handle-Request {
             return
         }
         Start-RemeasureFromRequest $resp $state
+    } elseif ($path -eq '/api/measure-fast') {
+        if ($req.HttpMethod -ne 'POST') {
+            $resp.StatusCode = 405
+            Write-JsonResponse $resp @{ ok = $false; error = 'Method Not Allowed' }
+            return
+        }
+        Start-FastMeasureFromRequest $resp $state
     } else {
         $resp.StatusCode = 404
         $bytes = [Text.Encoding]::UTF8.GetBytes('Not Found')
@@ -135,12 +148,71 @@ function Start-RemeasureFromRequest {
     $state.LastRemeasureResult = ''
     $state.LastRemeasureDeltaMs = $null
     $state.LastRemeasureAttempts = 0
-    $state.PendingTargetChange = $false
-    $state.MeasureInProgress = $true
-    $state.Status = 'measuring'
+    $previousTargetUrl = $state.TargetUrl
+    if (Get-Command Resolve-MeasurementTarget -ErrorAction SilentlyContinue) {
+        $measurementTarget = Resolve-MeasurementTarget -Url $state.TargetUrl
+        $state.TargetUrl = $measurementTarget.TargetUrl
+        $state.Host = ([Uri]$measurementTarget.TargetUrl).Host
+        $state.MeasurementUrl = $measurementTarget.MeasurementUrl
+        $state.MeasurementNote = $measurementTarget.MeasurementNote
+    }
+    # A remeasure of the same canonical target must still go through the
+    # existing delta guard: <=30ms keep existing, <=100ms accept, >100ms retry.
+    # Some sites (Interpark) get a fresh cache-busted MeasurementUrl every time,
+    # but that is not a target change.
+    $state.PendingTargetChange = ($previousTargetUrl -ne $state.TargetUrl)
+    $state.MeasureInProgress = $false
+    $state.Status = 'queued'
     Write-LogEvent @{ ev = 'remeasure_requested'; source = 'button'; host = $state.Host }
-    $state.MeasureTimer.Start()
+    Restart-MeasureTimer $state.MeasureTimer
     Write-JsonResponse $resp @{ ok = $true }
+}
+
+function Start-FastMeasureFromRequest {
+    param($resp, $state)
+
+    if (-not $state.TargetUrl) {
+        $resp.StatusCode = 409
+        Write-JsonResponse $resp @{ ok = $false; error = '먼저 측정 대상을 입력하세요.' }
+        return
+    }
+    if (-not $state.MeasureTimer) {
+        $resp.StatusCode = 500
+        Write-JsonResponse $resp @{ ok = $false; error = '측정 타이머가 준비되지 않았습니다.' }
+        return
+    }
+    if ($state.MeasureInProgress -or $state.MeasureTimer.Enabled) {
+        Write-JsonResponse $resp @{ ok = $true; alreadyRunning = $true }
+        return
+    }
+
+    $state.LastMeasureRequestedAt = Get-PcUtcNow
+    $state.LastRemeasureFinishedAt = $null
+    $state.LastRemeasureResult = ''
+    $state.LastRemeasureDeltaMs = $null
+    $state.LastRemeasureAttempts = 0
+    if (Get-Command Resolve-MeasurementTarget -ErrorAction SilentlyContinue) {
+        $measurementTarget = Resolve-MeasurementTarget -Url $state.TargetUrl
+        $state.TargetUrl = $measurementTarget.TargetUrl
+        $state.Host = ([Uri]$measurementTarget.TargetUrl).Host
+        $state.MeasurementUrl = $measurementTarget.MeasurementUrl
+        $state.MeasurementNote = $measurementTarget.MeasurementNote
+    }
+    # 타겟 변경이 아니라 명시적 빠른 측정. fast 경로는 게이트/재시도 없이 1회 채택.
+    $state.PendingTargetChange = $false
+    $state.MeasureMode = 'fast'
+    $state.MeasureInProgress = $false
+    $state.Status = 'queued'
+    Write-LogEvent @{ ev = 'fast_measure_requested'; source = 'button'; host = $state.Host }
+    Restart-MeasureTimer $state.MeasureTimer
+    Write-JsonResponse $resp @{ ok = $true }
+}
+
+function Restart-MeasureTimer {
+    param($Timer)
+    if (-not $Timer) { return }
+    $Timer.Stop()
+    $Timer.Start()
 }
 
 function Normalize-TargetUrl {
@@ -171,11 +243,22 @@ function Set-TargetState {
         [bool]$ForceInitialMeasure = $false
     )
 
-    $uri = [Uri]$Url
-    $isSameMeasuredTarget = (-not $ForceInitialMeasure) -and $State.TargetUrl -and $State.TargetUrl -eq $Url -and $State.LastMeasureAt
+    if (Get-Command Resolve-MeasurementTarget -ErrorAction SilentlyContinue) {
+        $measurementTarget = Resolve-MeasurementTarget -Url $Url
+    } else {
+        $measurementTarget = [PSCustomObject]@{
+            TargetUrl = $Url
+            MeasurementUrl = $Url
+            MeasurementNote = ''
+        }
+    }
+    $uri = [Uri]$measurementTarget.TargetUrl
+    $isSameMeasuredTarget = (-not $ForceInitialMeasure) -and $State.TargetUrl -and $State.TargetUrl -eq $measurementTarget.TargetUrl -and $State.LastMeasureAt
 
     $State.Host = $uri.Host
-    $State.TargetUrl = $Url
+    $State.TargetUrl = $measurementTarget.TargetUrl
+    $State.MeasurementUrl = $measurementTarget.MeasurementUrl
+    $State.MeasurementNote = $measurementTarget.MeasurementNote
     $State.PendingTargetChange = -not $isSameMeasuredTarget
     $State.LastMeasureRequestedAt = Get-PcUtcNow
     $State.LastRemeasureFinishedAt = $null
@@ -188,6 +271,7 @@ function Set-TargetState {
         $State.RttMedianMs = 0.0
         $State.SigmaMs = 0.0
         $State.Ci95Ms = 0.0
+        $State.LastError = ''
     }
 
     $State.MeasureInProgress = $false
@@ -204,9 +288,9 @@ function Set-TargetFromRequest {
         $url = Normalize-TargetUrl -Url ([string]$payload.url)
         Set-TargetState -State $state -Url $url -ForceInitialMeasure $true
 
-        Write-LogEvent @{ ev = 'target_changed'; host = $state.Host; url = $state.TargetUrl }
-        if ($state.MeasureTimer) { $state.MeasureTimer.Start() }
-        Write-JsonResponse $resp @{ ok = $true; host = $state.Host; targetUrl = $state.TargetUrl }
+        Write-LogEvent @{ ev = 'target_changed'; host = $state.Host; url = $state.TargetUrl; measurementUrl = $state.MeasurementUrl; measurementNote = $state.MeasurementNote }
+        Restart-MeasureTimer $state.MeasureTimer
+        Write-JsonResponse $resp @{ ok = $true; host = $state.Host; targetUrl = $state.TargetUrl; measurementUrl = $state.MeasurementUrl; measurementNote = $state.MeasurementNote }
     } catch {
         $resp.StatusCode = 400
         Write-JsonResponse $resp @{ ok = $false; error = "$_" }
@@ -237,6 +321,8 @@ function Write-StateJson {
     $payload = @{
         host           = $state.Host
         targetUrl      = $state.TargetUrl
+        measurementUrl = $state.MeasurementUrl
+        measurementNote = $state.MeasurementNote
         offsetMs       = $state.OffsetMs
         lastMeasureAt  = if ($state.LastMeasureAt) { $state.LastMeasureAt.ToString('o') } else { $null }
         lastMeasureRequestedAt = if ($state.LastMeasureRequestedAt) { $state.LastMeasureRequestedAt.ToString('o') } else { $null }
@@ -244,6 +330,8 @@ function Write-StateJson {
         lastRemeasureResult = $state.LastRemeasureResult
         lastRemeasureDeltaMs = $state.LastRemeasureDeltaMs
         lastRemeasureAttempts = $state.LastRemeasureAttempts
+        lastMeasureMode = $state.LastMeasureMode
+        lastError      = $state.LastError
         rttMedianMs    = $state.RttMedianMs
         sigmaMs        = $state.SigmaMs
         ci95Ms         = $state.Ci95Ms
@@ -264,6 +352,8 @@ function Write-SamplesJson {
     $payload = @{
         host          = $state.Host
         targetUrl     = $state.TargetUrl
+        measurementUrl = $state.MeasurementUrl
+        measurementNote = $state.MeasurementNote
         lastMeasureAt = if ($state.LastMeasureAt) { $state.LastMeasureAt.ToString('o') } else { $null }
         method        = $state.Method
         offsetMs      = $state.OffsetMs

@@ -9,6 +9,8 @@ function New-StateStore {
         MeasurementUrl = ''
         MeasurementNote = ''
         PendingTargetChange = $false
+        MeasureMode   = 'normal'
+        LastMeasureMode = 'normal'
         OffsetMs      = 0.0
         LastMeasureAt = $null
         LastMeasureRequestedAt = $null
@@ -109,6 +111,13 @@ function Handle-Request {
             return
         }
         Start-RemeasureFromRequest $resp $state
+    } elseif ($path -eq '/api/measure-fast') {
+        if ($req.HttpMethod -ne 'POST') {
+            $resp.StatusCode = 405
+            Write-JsonResponse $resp @{ ok = $false; error = 'Method Not Allowed' }
+            return
+        }
+        Start-FastMeasureFromRequest $resp $state
     } else {
         $resp.StatusCode = 404
         $bytes = [Text.Encoding]::UTF8.GetBytes('Not Found')
@@ -155,6 +164,46 @@ function Start-RemeasureFromRequest {
     $state.MeasureInProgress = $false
     $state.Status = 'queued'
     Write-LogEvent @{ ev = 'remeasure_requested'; source = 'button'; host = $state.Host }
+    Restart-MeasureTimer $state.MeasureTimer
+    Write-JsonResponse $resp @{ ok = $true }
+}
+
+function Start-FastMeasureFromRequest {
+    param($resp, $state)
+
+    if (-not $state.TargetUrl) {
+        $resp.StatusCode = 409
+        Write-JsonResponse $resp @{ ok = $false; error = '먼저 측정 대상을 입력하세요.' }
+        return
+    }
+    if (-not $state.MeasureTimer) {
+        $resp.StatusCode = 500
+        Write-JsonResponse $resp @{ ok = $false; error = '측정 타이머가 준비되지 않았습니다.' }
+        return
+    }
+    if ($state.MeasureInProgress -or $state.MeasureTimer.Enabled) {
+        Write-JsonResponse $resp @{ ok = $true; alreadyRunning = $true }
+        return
+    }
+
+    $state.LastMeasureRequestedAt = Get-PcUtcNow
+    $state.LastRemeasureFinishedAt = $null
+    $state.LastRemeasureResult = ''
+    $state.LastRemeasureDeltaMs = $null
+    $state.LastRemeasureAttempts = 0
+    if (Get-Command Resolve-MeasurementTarget -ErrorAction SilentlyContinue) {
+        $measurementTarget = Resolve-MeasurementTarget -Url $state.TargetUrl
+        $state.TargetUrl = $measurementTarget.TargetUrl
+        $state.Host = ([Uri]$measurementTarget.TargetUrl).Host
+        $state.MeasurementUrl = $measurementTarget.MeasurementUrl
+        $state.MeasurementNote = $measurementTarget.MeasurementNote
+    }
+    # 타겟 변경이 아니라 명시적 빠른 측정. fast 경로는 게이트/재시도 없이 1회 채택.
+    $state.PendingTargetChange = $false
+    $state.MeasureMode = 'fast'
+    $state.MeasureInProgress = $false
+    $state.Status = 'queued'
+    Write-LogEvent @{ ev = 'fast_measure_requested'; source = 'button'; host = $state.Host }
     Restart-MeasureTimer $state.MeasureTimer
     Write-JsonResponse $resp @{ ok = $true }
 }
@@ -281,6 +330,7 @@ function Write-StateJson {
         lastRemeasureResult = $state.LastRemeasureResult
         lastRemeasureDeltaMs = $state.LastRemeasureDeltaMs
         lastRemeasureAttempts = $state.LastRemeasureAttempts
+        lastMeasureMode = $state.LastMeasureMode
         lastError      = $state.LastError
         rttMedianMs    = $state.RttMedianMs
         sigmaMs        = $state.SigmaMs

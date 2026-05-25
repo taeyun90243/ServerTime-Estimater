@@ -34,6 +34,7 @@
   let slewRemainingMs = 0;
   let lastRenderPerfMs = null;
   let localReloadRemeasure = false;
+  let localFastMeasure = false;
   let activeTargetUrl = null;
   let activeMeasurementUrl = null;
   let activeMeasureRequestAt = null;
@@ -42,7 +43,9 @@
   const targetForm = document.getElementById('target-form');
   const targetInput = document.getElementById('target-url');
   const remeasureButton = document.getElementById('remeasure-button');
+  const fastMeasureButton = document.getElementById('fast-measure-button');
   const durationHint = document.getElementById('duration-hint');
+  const CAP_HINT = '측정 최대 20초 · 재측정 최대 15초 · 빠른 측정 최대 5초';
 
   function setStatusText(text, warn, prominent) {
     const st = document.getElementById('status');
@@ -117,7 +120,7 @@
   async function requestRemeasure() {
     if (!state || !state.lastMeasureAt || state.status === 'measuring' || state.status === 'queued') return;
     remeasureButton.disabled = true;
-    setDurationHint('재측정: 기본 구간 약 6초, 최대 10초');
+    setDurationHint(CAP_HINT);
     setStatusText('재측정 요청 중...', false, true);
     resetClockBase();
     localReloadRemeasure = true;
@@ -135,6 +138,30 @@
 
   remeasureButton.addEventListener('click', requestRemeasure);
 
+  async function requestFastMeasure() {
+    if (!state || !state.targetUrl || state.status === 'measuring' || state.status === 'queued') return;
+    // 최근(5분 이내) 유효 측정이 있으면 저정확도 결과로 덮어쓰기 전에 확인.
+    const recent = state.lastMeasureAt && state.status !== 'stale';
+    if (recent && !window.confirm('최근 측정값이 있습니다. 빠른 측정(정확도 낮음)으로 덮어쓸까요?')) return;
+    fastMeasureButton.disabled = true;
+    setStatusText('빠른 측정 요청 중...', false, true);
+    resetClockBase();
+    localFastMeasure = true;
+    try {
+      const res = await fetch('/api/measure-fast', { method: 'POST', cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || '빠른 측정 요청 실패');
+      await fetchState();
+    } catch (e) {
+      localFastMeasure = false;
+      setStatusText(e.message || '빠른 측정 요청 실패', true, true);
+    } finally {
+      updateControls();
+    }
+  }
+
+  fastMeasureButton.addEventListener('click', requestFastMeasure);
+
   function setDurationHint(text) {
     durationHint.textContent = text;
   }
@@ -142,16 +169,11 @@
   function updateControls() {
     const isBusy = !!state && (state.status === 'measuring' || state.status === 'queued');
     const hasMeasuredTarget = !!state && !!state.targetUrl && !!state.lastMeasureAt;
+    const hasTarget = !!state && !!state.targetUrl;
     remeasureButton.disabled = isBusy || !hasMeasuredTarget;
-
-    if (isBusy) {
-      const isRemeasure = hasPendingRemeasure() || localReloadRemeasure;
-      setDurationHint(isRemeasure ? '재측정: 기본 구간 약 6초, 최대 10초' : '초기 측정: 기본 구간 약 6초, 최대 20초');
-    } else if (hasMeasuredTarget) {
-      setDurationHint('재측정: 기본 구간 약 6초, 최대 10초');
-    } else {
-      setDurationHint('초기 측정: 기본 구간 약 6초, 최대 20초');
-    }
+    // 빠른 측정은 첫 측정으로도 쓸 수 있어 targetUrl만 있으면 활성.
+    if (fastMeasureButton) fastMeasureButton.disabled = isBusy || !hasTarget;
+    setDurationHint(CAP_HINT);
   }
 
   async function fetchState() {
@@ -216,9 +238,11 @@
       if (data.lastMeasureRequestedAt && data.lastMeasureAt &&
           new Date(data.lastMeasureAt).getTime() >= new Date(data.lastMeasureRequestedAt).getTime()) {
         localReloadRemeasure = false;
+        localFastMeasure = false;
       } else if (data.lastMeasureRequestedAt && data.lastRemeasureFinishedAt &&
           new Date(data.lastRemeasureFinishedAt).getTime() >= new Date(data.lastMeasureRequestedAt).getTime()) {
         localReloadRemeasure = false;
+        localFastMeasure = false;
       }
     } catch (e) {
       console.warn('fetchState failed', e);
@@ -270,7 +294,8 @@
   }
 
   function activeMeasureLabel() {
-    return isRemeasureUiActive() ? '재측정 중... (10초 이내)' : '초기 측정 중... (20초 이내)';
+    if (localFastMeasure) return '빠른 측정 중... (최대 5초)';
+    return isRemeasureUiActive() ? '재측정 중... (15초 이내)' : '초기 측정 중... (20초 이내)';
   }
 
   function render() {
@@ -339,7 +364,8 @@
       : '-';
     const sampleCount = state.sampleCount || 0;
     const acceptedCount = state.acceptedCount || 0;
-    const label = methodLabel(state.method, state.edgeCount, acceptedCount);
+    let label = methodLabel(state.method, state.edgeCount, acceptedCount);
+    if (state.lastMeasureMode === 'fast') label = '⚡ 빠른 측정 · ' + label + ' (정확도 낮음)';
     const measurementNote = state.measurementNote === 'interpark-final-ticket-page'
       ? '  측정경로: nol.interpark.com/ticket'
       : '';
@@ -545,7 +571,8 @@
 
     // 요약
     const elapsedTotal = (totalMs / 1000).toFixed(2);
-    const label = methodLabel(data.method, edges.length, data.acceptedCount);
+    let label = methodLabel(data.method, edges.length, data.acceptedCount);
+    if (state && state.lastMeasureMode === 'fast') label = '⚡ 빠른 측정 · ' + label + ' (정확도 낮음)';
     const measurementNote = data.measurementNote === 'interpark-final-ticket-page'
       ? ' | 측정경로 nol.interpark.com/ticket'
       : '';

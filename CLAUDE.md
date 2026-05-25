@@ -1,5 +1,28 @@
 # 서버시간 측정 서비스 (Server Time Estimator)
 
+## 빠른 측정 기능 + 재측정 cap 10→15초 (2026-05-25, Claude)
+
+### 재측정 cap 상향 (10→15초)
+
+로그 분석: `remeasure_failed_insufficient` 10건 중 9건이 `edge-intersect`(전부 상호 일치)인데 edge가 4개로 딱 1개 부족. 같은 호스트(`den08.inames.kr`)가 **초기측정(20초 예산)에선 edge 9개, 재측정(10초)에선 4개** → 순수 예산 부족(데이터는 clean). 버려진 4-edge 값들도 기존 offset과 8~24ms 이내 일치.
+
+→ `probe.ps1` `$RemeasureBudgetMs` **10000→15000**. cap은 *상한*이라 빠른 호스트(이미 6초에 edge 8~10개)는 일찍 accept하고 빠져나가므로 비용 0. 느린 호스트만 5개 도달할 시간을 더 받음. edge 게이트(`MinAcceptedEdges=5`)는 정확도/안전 보장이라 그대로 유지. (release 사본은 이미 15000이었음 → src가 뒤처졌던 것.)
+
+### 빠른 측정(Fast Measurement)
+
+"20초를 못 기다리는 사용자"용 저정확도 1회성 측정. 설계/계획: `docs/superpowers/specs/2026-05-25-fast-measurement-design.md`, `docs/superpowers/plans/2026-05-25-fast-measurement.md`.
+
+- **알고리즘(신규 함수 0개)**: 기존 `Invoke-AdaptiveMultiSample`을 `-TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000`으로 1회 호출. `MinEdgeCount=1`이라 연장 루프 비활성화(5초 내 종료). edge 1~3개 → ±100~300ms, 0개(frozen) → ±500ms.
+- **게이트 우회**: 재측정 게이트/delta 재시도 안 탐. 1회 결과를 그대로 채택·덮어쓰기(명시적 동작). 첫 측정으로도 사용 가능(LastMeasureAt 불필요).
+- **서버**: state에 `MeasureMode`('normal'|'fast')/`LastMeasureMode` 추가. Elapsed 핸들러 상단에 fast 분기(채택 후 `MeasureMode='normal'` 리셋). 신규 `POST /api/measure-fast`(`Start-FastMeasureFromRequest`). `/api/state`에 `lastMeasureMode` 노출.
+- **UI**: `⚡ 빠른 측정` 버튼. 클릭 시 **최근(5분 이내, 기존 stale 임계값 재사용) 유효 측정이 있으면 `confirm()`로 덮어쓰기 확인**, 오래됨/없음이면 바로 실행. `duration-hint`를 `측정 최대 20초 · 재측정 최대 15초 · 빠른 측정 최대 5초`로 cap 3개 명시(요구사항). 결과 라벨에 `⚡ 빠른 측정 · … (정확도 낮음)` 접두. stale했던 `재측정 중... (10초)` → `(15초)` 수정.
+- **테스트**: edge 1개에서 `Reduce-Samples`가 throw 없이 edge 결과 반환 회귀 추가. **40 passed**. (데드라인 Mock 테스트는 Pester v3가 dot-source 함수 Mock을 못 잡아 생략.)
+- 배포본 `release/ServerTimeTools/src` 동기화 + zip 재생성.
+
+### 주의
+
+- 빠른 측정은 정밀 offset이 있어도 덮어쓴다(저정확도). 안전장치는 confirm + "정확도 낮음" 라벨뿐. F5 재측정은 `LastMeasureMode`가 다시 normal이 되어 기존 15초 정밀 경로를 탄다.
+
 ## Age 보정 조건부화 (ticket.interpark.com +N초 과보정 회귀 수정) (2026-05-24, Claude)
 
 바로 아래 절(무조건 `Date+Age`)의 **회귀**를 잡은 후속 수정.

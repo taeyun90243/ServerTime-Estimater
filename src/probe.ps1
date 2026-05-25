@@ -100,8 +100,41 @@ $measureSubscription = Register-ObjectEvent `
         if ($s.MeasureInProgress) { return }
         $s.MeasureInProgress = $true
         $s.Status = 'measuring'
+
+        # 빠른 측정: 게이트/재시도 없이 1회 측정 후 그대로 채택(최대 5초). 정밀 경로와 분리.
+        if ($s.MeasureMode -eq 'fast') {
+            try {
+                try { Write-LogEvent @{ ev = 'measure_started'; mode = 'fast'; host = $s.Host; targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl } } catch {}
+                $measurementUrl = if ($s.MeasurementUrl) { $s.MeasurementUrl } else { $s.TargetUrl }
+                $r = Invoke-AdaptiveMultiSample -Url $measurementUrl -TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000
+                $s.OffsetMs = $r.OffsetMs; $s.RttMedianMs = $r.RttMedianMs; $s.SigmaMs = $r.SigmaMs
+                $s.Ci95Ms = $r.Ci95Ms; $s.SampleCount = $r.SampleCount; $s.AcceptedCount = $r.AcceptedCount
+                $s.Method = $r.Method; $s.IntersectWidthMs = $r.IntersectWidthMs
+                $s.LastSamples = $r.Samples; $s.LastEdges = $r.Edges
+                $s.LastMeasureAt = Get-PcUtcNow; $s.LastMeasureMode = 'fast'
+                $s.LastRemeasureResult = 'fast'; $s.LastError = ''; $s.Status = 'ok'
+                $s.PendingTargetChange = $false
+                Write-LogEvent @{
+                    ev = 'measure'; mode = 'fast'; host = $s.Host
+                    targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl; measurementNote = $s.MeasurementNote
+                    offsetMs = $r.OffsetMs; sigmaMs = $r.SigmaMs; rttMedianMs = $r.RttMedianMs
+                    sampleCount = $r.SampleCount; acceptedCount = $r.AcceptedCount; method = $r.Method
+                }
+            } catch {
+                $s.LastError = "$_"
+                if ($s.LastMeasureAt) { $s.LastRemeasureResult = 'failed'; $s.Status = 'ok' } else { $s.Status = 'failed' }
+                try { Write-LogEvent @{ ev = 'measure_failed'; mode = 'fast'; targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl; reason = "$_" } } catch {}
+            } finally {
+                $s.MeasureMode = 'normal'
+                $s.MeasureInProgress = $false
+                $s.LastRemeasureFinishedAt = Get-PcUtcNow
+            }
+            return
+        }
+
         try {
             try { Write-LogEvent @{ ev = 'measure_started'; host = $s.Host; targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl } } catch {}
+            $s.LastMeasureMode = 'normal'
             $previousOffsetMs = [double]$s.OffsetMs
             $isTargetChange = [bool]$s.PendingTargetChange -or (-not $s.LastMeasureAt)
             $accepted = $false
@@ -110,10 +143,14 @@ $measureSubscription = Register-ObjectEvent `
             $lastResult = $null
             $lastDeltaMs = $null
 
-            # 재측정은 10초 하드캡, 첫 측정/타겟 변경은 20초 하드캡.
+            # 재측정은 15초 하드캡, 첫 측정/타겟 변경은 20초 하드캡.
             # 재측정 캡은 2회 시도 전체에 공유.
+            # 10초였을 때 edge를 천천히 뱉는 호스트(예: den08.inames.kr)가
+            # 초기측정(20초)에선 edge 9개를 뽑으면서 재측정에선 4개에 그쳐
+            # fail-insufficient가 반복됨(데이터는 clean, 시간만 부족). cap은 상한이라
+            # 빠른 호스트는 일찍 accept하고 빠져나가므로 올려도 그쪽 비용은 없음.
             $InitialMeasureBudgetMs = 20000
-            $RemeasureBudgetMs = 10000
+            $RemeasureBudgetMs = 15000
             $budgetSw = [System.Diagnostics.Stopwatch]::StartNew()
 
             for ($attempt = 1; $attempt -le 2; $attempt++) {

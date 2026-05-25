@@ -298,3 +298,20 @@ Describe 'Get-RemeasureAttemptDecision' {
         Get-RemeasureAttemptDecision -IsTargetChange $false -AcceptedCount 5 -DeltaMs 100 | Should Be 'accept'
     }
 }
+
+Describe 'Fast measurement path' {
+    # 빠른 측정(MinEdgeCount=1)은 edge가 1~2개여도 결과를 채택한다.
+    # 적은 edge에서 Reduce-Samples가 throw 없이 edge 계열 결과를 내는지 회귀.
+    It 'Reduce-Samples returns an edge result with a single edge (no throw)' {
+        # ServerDateMs가 ~1000ms 점프(초 경계 전환)하지만 PC시각은 ~100ms만 진행 → edge 1개.
+        $base = 1700000000000.0
+        $samples = @(
+            [PSCustomObject]@{ RttMs=80.0; RawServerDateMs=$base;          AgeSec=0; ServerDateMs=$base;          PcAtT2Ms=($base+50);  RawOffsetMs=0.0; OffsetMs=0.0 }
+            [PSCustomObject]@{ RttMs=80.0; RawServerDateMs=($base+1000.0); AgeSec=0; ServerDateMs=($base+1000.0); PcAtT2Ms=($base+150); RawOffsetMs=0.0; OffsetMs=0.0 }
+        )
+        { Reduce-Samples -Samples $samples } | Should Not Throw
+        $r = Reduce-Samples -Samples $samples
+        $r | Should Not BeNullOrEmpty
+        $r.Method | Should Match '^edge'
+    }
+}
