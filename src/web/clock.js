@@ -408,8 +408,10 @@
     } else if (state.lastRemeasureResult === 'failed-insufficient-edges') {
       setStatusText('재측정 실패 (edge 부족): 기존값 유지', true, true);
     } else if (state.lastRemeasureResult === 'rejected') {
+      // 새 측정이 기존값과 100ms 넘게 벌어져 2회 모두 거부 → 기존값을 그대로 둔다.
+      // 이 정도로 벌어졌다면 기존값이 낡았을 수 있으니 '측정' 버튼으로 새로 재기를 권한다.
       const delta = Math.round(state.lastRemeasureDeltaMs || 0);
-      setStatusText(`재측정 편차 ${delta}ms 초과: 기존값 유지`, true, true);
+      setStatusText(`재측정 편차 ${delta}ms 초과: 기존값 유지 — 초기측정 필요(측정 버튼)`, true, true);
     } else if (state.lastRemeasureResult === 'kept-small-delta') {
       const delta = Math.round(state.lastRemeasureDeltaMs || 0);
       setStatusText(`재측정 차이 ${delta}ms: 기존값 유지`, false, true);
