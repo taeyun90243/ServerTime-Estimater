@@ -23,6 +23,12 @@
 
 예산을 줄였으므로 **den08 나쁜 구간에선 8 edge에 못 미친 채 천장에서 중단**(`deadline-before-extension`)됨 → 그 구간 재측정은 `fail-insufficient`(기존 offset 유지)가 다소 늘 수 있음. 단 좋은 구간 실측은 7 edge/14.5초로 목표 근접. 시간↔정확도 맞교환이며 사용자 선택. 아래 "재측정 cap 10→15초" 절의 15초 상향 결정은 이 절로 **부분 정정**(12초로 재인하).
 
+### 후속: `MaxExtensions` 3→20 (연장이 예산 천장을 못 쓰던 문제)
+
+위 변경 직후 사용자가 "초기측정이 edge 3개·8.93초에 멈춤(MinEdge 미달·시간 천장 미달인데도)"을 보고. 원인: 연장 루프가 `MaxExtensions=3`라, 시간 예산이 ~6초 남아도 **3라운드 소진 시 `max-extensions`로 조기 종료**. 즉 지터 큰 서버에선 시간 천장이 아니라 연장 횟수가 실질 한계라, 천장을 20→15로 내린 게 이런 케이스엔 무효였음.
+
+→ `measurement.ps1` `MaxExtensions` **3→20**. 루프 안 deadline 체크가 종료를 보장하므로 실질 한계가 `MaxTotalMs`(15초/12초)로 이동. 빠른 측정은 `MinEdgeCount=1`이라 과연장 안 됨. 실측(den08): edge 3개/8.93초 → **5~7개/~14.5초**, 종료사유 `max-extensions`→`deadline-before-extension`. 테스트 42 passed.
+
 ## 빠른 측정 기능 + 재측정 cap 10→15초 (2026-05-25, Claude)
 
 ### 재측정 cap 상향 (10→15초)

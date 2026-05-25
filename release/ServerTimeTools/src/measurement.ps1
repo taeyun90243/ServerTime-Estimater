@@ -741,7 +741,12 @@ function Invoke-AdaptiveMultiSample {
         [int]$RttProbeCount = 3,
         [int]$MinEdgeCount = 8,
         [int]$ExtendWindowMs = 3000,
-        [int]$MaxExtensions = 3,
+        # 연장 횟수 상한. 예전엔 3이라 시간 예산(MaxTotalMs)이 남아도 3라운드만에
+        # 'max-extensions'로 조기 종료했다(지터 큰 서버에서 edge 부족인데도 ~9초에 멈춤).
+        # 20으로 올려 실질 한계를 MaxTotalMs 데드라인으로 옮긴다. 루프 안 deadline 체크가
+        # 종료를 보장하므로 이 값은 사실상 "예산을 다 쓸 때까지"의 안전 상한일 뿐이다.
+        # (빠른 측정은 MinEdgeCount=1이라 edge 1개에서 멈춰 과연장 안 됨.)
+        [int]$MaxExtensions = 20,
         [int]$DefaultTimeoutMs = 3000,
         [int]$MaxTotalMs = 0,
         # 성공 샘플이 목표 Count의 이 비율 미만이면 throw. 빠른 측정은 낮게 줘서
