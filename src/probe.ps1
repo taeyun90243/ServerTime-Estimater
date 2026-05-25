@@ -69,6 +69,7 @@ if ($url) {
         $state.AcceptedCount = $result.AcceptedCount
         $state.Method        = $result.Method
         $state.IntersectWidthMs = $result.IntersectWidthMs
+        Set-MeasurementRuntimeState -State $state -Result $result
         $state.LastSamples   = $result.Samples
         $state.LastEdges     = $result.Edges
         $state.LastMeasureAt = Get-PcUtcNow
@@ -84,6 +85,8 @@ if ($url) {
             sampleCount = $result.SampleCount; acceptedCount = $result.AcceptedCount
             defaultTimeoutMs = $result.DefaultTimeoutMs; adaptiveTimeoutMs = $result.AdaptiveTimeoutMs
             probeMode = $result.ProbeMode
+            attemptedProbeCount = $result.AttemptedProbeCount; failedProbeCount = $result.FailedProbeCount
+            wallElapsedMs = $result.WallElapsedMs; stopReason = $result.StopReason
             method = $result.Method
         }
     } catch {
@@ -165,6 +168,7 @@ $measureSubscription = Register-ObjectEvent `
                 $s.OffsetMs = $r.OffsetMs; $s.RttMedianMs = $r.RttMedianMs; $s.SigmaMs = $r.SigmaMs
                 $s.Ci95Ms = $r.Ci95Ms; $s.SampleCount = $r.SampleCount; $s.AcceptedCount = $r.AcceptedCount
                 $s.Method = $r.Method; $s.IntersectWidthMs = $r.IntersectWidthMs
+                Set-MeasurementRuntimeState -State $s -Result $r
                 $s.LastSamples = $r.Samples; $s.LastEdges = $r.Edges
                 $s.LastMeasureAt = Get-PcUtcNow; $s.LastMeasureMode = 'fast'
                 $s.LastRemeasureResult = 'fast'; $s.LastError = ''; $s.Status = 'ok'
@@ -176,6 +180,8 @@ $measureSubscription = Register-ObjectEvent `
                     sampleCount = $r.SampleCount; acceptedCount = $r.AcceptedCount
                     defaultTimeoutMs = $r.DefaultTimeoutMs; adaptiveTimeoutMs = $r.AdaptiveTimeoutMs
                     probeMode = $r.ProbeMode
+                    attemptedProbeCount = $r.AttemptedProbeCount; failedProbeCount = $r.FailedProbeCount
+                    wallElapsedMs = $r.WallElapsedMs; stopReason = $r.StopReason
                     method = $r.Method
                 }
             } catch {
@@ -257,6 +263,7 @@ $measureSubscription = Register-ObjectEvent `
             if ($lastResult) {
                 $s.LastSamples = $lastResult.Samples
                 $s.LastEdges = $lastResult.Edges
+                Set-MeasurementRuntimeState -State $s -Result $lastResult
             }
 
             if ($accepted) {
@@ -281,6 +288,8 @@ $measureSubscription = Register-ObjectEvent `
                     sampleCount = $lastResult.SampleCount; acceptedCount = $lastResult.AcceptedCount
                     defaultTimeoutMs = $lastResult.DefaultTimeoutMs; adaptiveTimeoutMs = $lastResult.AdaptiveTimeoutMs
                     probeMode = $lastResult.ProbeMode
+                    attemptedProbeCount = $lastResult.AttemptedProbeCount; failedProbeCount = $lastResult.FailedProbeCount
+                    wallElapsedMs = $lastResult.WallElapsedMs; stopReason = $lastResult.StopReason
                     attempt = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     method = $lastResult.Method
                 }
@@ -294,6 +303,8 @@ $measureSubscription = Register-ObjectEvent `
                     attempt = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
                     thresholdMs = 30
+                    attemptedProbeCount = $lastResult.AttemptedProbeCount; failedProbeCount = $lastResult.FailedProbeCount
+                    wallElapsedMs = $lastResult.WallElapsedMs; stopReason = $lastResult.StopReason
                 }
             } elseif ($insufficientEdges) {
                 # edge 부족: 적은 edge로 갱신하지 않고 기존 offset 유지. 실패만 표시.
@@ -303,6 +314,8 @@ $measureSubscription = Register-ObjectEvent `
                     ev = 'remeasure_failed_insufficient'; host = $s.Host
                     targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl
                     acceptedCount = [int]$lastResult.AcceptedCount; method = $lastResult.Method
+                    attemptedProbeCount = $lastResult.AttemptedProbeCount; failedProbeCount = $lastResult.FailedProbeCount
+                    wallElapsedMs = $lastResult.WallElapsedMs; stopReason = $lastResult.StopReason
                     previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
                 }
             } else {
@@ -314,6 +327,8 @@ $measureSubscription = Register-ObjectEvent `
                     attempts = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
                     thresholdMs = 100
+                    attemptedProbeCount = $lastResult.AttemptedProbeCount; failedProbeCount = $lastResult.FailedProbeCount
+                    wallElapsedMs = $lastResult.WallElapsedMs; stopReason = $lastResult.StopReason
                 }
             }
             $s.LastRemeasureFinishedAt = Get-PcUtcNow

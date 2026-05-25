@@ -414,12 +414,50 @@ function Add-MeasurementRuntimeInfo {
         [Parameter(Mandatory)]$Result,
         [Parameter(Mandatory)][int]$DefaultTimeoutMs,
         [Parameter(Mandatory)][int]$AdaptiveTimeoutMs,
-        [string]$ProbeMode = ''
+        [string]$ProbeMode = '',
+        [int]$AttemptedProbeCount = 0,
+        [int]$FailedProbeCount = 0,
+        [double]$WallElapsedMs = 0,
+        [string]$StopReason = ''
     )
     $Result | Add-Member -NotePropertyName DefaultTimeoutMs -NotePropertyValue $DefaultTimeoutMs -Force
     $Result | Add-Member -NotePropertyName AdaptiveTimeoutMs -NotePropertyValue $AdaptiveTimeoutMs -Force
     $Result | Add-Member -NotePropertyName ProbeMode -NotePropertyValue $ProbeMode -Force
+    $Result | Add-Member -NotePropertyName AttemptedProbeCount -NotePropertyValue $AttemptedProbeCount -Force
+    $Result | Add-Member -NotePropertyName FailedProbeCount -NotePropertyValue $FailedProbeCount -Force
+    $Result | Add-Member -NotePropertyName WallElapsedMs -NotePropertyValue $WallElapsedMs -Force
+    $Result | Add-Member -NotePropertyName StopReason -NotePropertyValue $StopReason -Force
     return $Result
+}
+
+function Set-MeasurementRuntimeState {
+    param($State, $Result)
+    $State.MeasurementWallElapsedMs = [double]$Result.WallElapsedMs
+    $State.AttemptedProbeCount = [int]$Result.AttemptedProbeCount
+    $State.FailedProbeCount = [int]$Result.FailedProbeCount
+    $State.StopReason = [string]$Result.StopReason
+    $State.AdaptiveTimeoutMs = [int]$Result.AdaptiveTimeoutMs
+    $State.DefaultTimeoutMs = [int]$Result.DefaultTimeoutMs
+    $State.ProbeMode = [string]$Result.ProbeMode
+}
+
+function Get-AdaptiveTimeoutMs {
+    param(
+        [Parameter(Mandatory)][double[]]$RttMs,
+        [int]$DefaultTimeoutMs = 3000
+    )
+    $sorted = @($RttMs | Sort-Object)
+    if ($sorted.Count -eq 0) { return $DefaultTimeoutMs }
+
+    $median = Get-Median -Values $sorted
+    $p35Index = [int][Math]::Floor(($sorted.Count - 1) * 0.35)
+    $p35 = [double]$sorted[$p35Index]
+
+    # 초기 RTT 3개 중 1~2개가 튀면 median이 너무 커져 timeout이 초 단위로 고정된다.
+    # 하위권 RTT와 median의 절반 중 큰 값을 basis로 써서 과격한 축소는 막되 spike 영향은 낮춘다.
+    $basis = [Math]::Max($p35, $median * 0.5)
+    $timeoutMs = [int][Math]::Ceiling([Math]::Max((4 * $basis), ($basis + 300)))
+    return [Math]::Max(500, [Math]::Min($DefaultTimeoutMs, $timeoutMs))
 }
 
 function Select-QuantizedOffsetCandidates {
@@ -715,6 +753,9 @@ function Invoke-AdaptiveMultiSample {
     $probeHost = try { ([Uri]$Url).Host.ToLowerInvariant() } catch { '' }
     $probeMode = if ($probeHost -and $script:ProbeModeByHost.ContainsKey($probeHost)) { $script:ProbeModeByHost[$probeHost] } else { 'head' }
     $deadlineSw = [System.Diagnostics.Stopwatch]::StartNew()
+    $attemptedProbeCount = 0
+    $failedProbeCount = 0
+    $stopReason = 'completed'
     # 데드라인 초과 여부. ReserveMs는 곧 시작할 요청의 최대 비용(=timeout)으로,
     # 그만큼 일찍 멈춰 in-flight 요청까지 포함해 MaxTotalMs를 넘지 않게 한다.
     $isPastDeadline = {
@@ -724,8 +765,9 @@ function Invoke-AdaptiveMultiSample {
 
     # RTT 추정 단계: timeout 알 수 없으니 기본값 사용
     for ($i = 0; $i -lt $RttProbeCount; $i++) {
-        if (& $isPastDeadline $DefaultTimeoutMs) { break }
+        if (& $isPastDeadline $DefaultTimeoutMs) { $stopReason = 'deadline-before-rtt-probe'; break }
         try {
+            $attemptedProbeCount++
             $s = if ($useNaverClockApi) {
                 Invoke-NaverTimeProbe -TimeoutMs $DefaultTimeoutMs
             } else {
@@ -736,7 +778,7 @@ function Invoke-AdaptiveMultiSample {
                 if ($probeHost) { $script:ProbeModeByHost[$probeHost] = 'range' }
             }
             [void]$samples.Add($s)
-        } catch { }
+        } catch { $failedProbeCount++ }
         Start-Sleep -Milliseconds $IntervalMs
     }
     if ($samples.Count -eq 0) {
@@ -748,21 +790,22 @@ function Invoke-AdaptiveMultiSample {
     $estimated = [int][Math]::Ceiling($TargetWindowMs / ($rttMedian + $IntervalMs))
     $count = [Math]::Max($MinCount, [Math]::Min($MaxCount, $estimated))
 
-    # 적응형 timeout: 밀리초 단위로 max(4×RTT, RTT+300ms, 500ms), 기본 상한 3초.
-    # RTT 70ms → 500ms, RTT 200ms → 800ms, RTT 500ms → 2000ms.
-    $adaptiveTimeoutMs = [int][Math]::Ceiling([Math]::Max((4 * $rttMedian), ($rttMedian + 300)))
-    $adaptiveTimeoutMs = [Math]::Max(500, [Math]::Min($DefaultTimeoutMs, $adaptiveTimeoutMs))
+    # 적응형 timeout: RTT 하위권을 섞어 초기 spike가 timeout을 초 단위로 고정하지 못하게 한다.
+    $adaptiveTimeoutMs = Get-AdaptiveTimeoutMs -RttMs $rtts -DefaultTimeoutMs $DefaultTimeoutMs
 
     for ($i = $samples.Count; $i -lt $count; $i++) {
-        if (& $isPastDeadline $adaptiveTimeoutMs) { break }
+        if (& $isPastDeadline $adaptiveTimeoutMs) { $stopReason = 'deadline-before-main-sample'; break }
         try {
+            $attemptedProbeCount++
             $s = if ($useNaverClockApi) { Invoke-NaverTimeProbe -TimeoutMs $adaptiveTimeoutMs } else { Invoke-DateProbe -Url $Url -TimeoutMs $adaptiveTimeoutMs -ProbeMode $probeMode -AllowFallback }
             if ($s.ProbeMode -eq 'range-fallback') {
                 $probeMode = 'range'
                 if ($probeHost) { $script:ProbeModeByHost[$probeHost] = 'range' }
             }
             [void]$samples.Add($s)
-        } catch { }
+            $newTimeoutMs = Get-AdaptiveTimeoutMs -RttMs @($samples | ForEach-Object { [double]$_.RttMs }) -DefaultTimeoutMs $DefaultTimeoutMs
+            if ($newTimeoutMs -lt $adaptiveTimeoutMs) { $adaptiveTimeoutMs = $newTimeoutMs }
+        } catch { $failedProbeCount++ }
         if ($i -lt $count - 1) { Start-Sleep -Milliseconds $IntervalMs }
     }
 
@@ -773,7 +816,7 @@ function Invoke-AdaptiveMultiSample {
     }
     if ($useNaverClockApi) {
         $precise = Reduce-PreciseSamples -Samples $samples -Method 'naver-time-api'
-        return Add-MeasurementRuntimeInfo -Result $precise -DefaultTimeoutMs $DefaultTimeoutMs -AdaptiveTimeoutMs $adaptiveTimeoutMs -ProbeMode 'naver-time-api'
+        return Add-MeasurementRuntimeInfo -Result $precise -DefaultTimeoutMs $DefaultTimeoutMs -AdaptiveTimeoutMs $adaptiveTimeoutMs -ProbeMode 'naver-time-api' -AttemptedProbeCount $attemptedProbeCount -FailedProbeCount $failedProbeCount -WallElapsedMs $deadlineSw.Elapsed.TotalMilliseconds -StopReason $stopReason
     }
 
     # Edge가 부족하면 윈도우 연장. 최대 MaxExtensions회 반복.
@@ -782,25 +825,31 @@ function Invoke-AdaptiveMultiSample {
     $tentative = Reduce-Samples -Samples $samples
     for ($round = 0; $round -lt $MaxExtensions; $round++) {
         # edge 계열이고 edge가 부족할 때만 연장(Test-ShouldExtendWindow).
-        if (-not (Test-ShouldExtendWindow -Method $tentative.Method -AcceptedCount $tentative.AcceptedCount -MinEdgeCount $MinEdgeCount)) { break }
-        if ($ExtendWindowMs -le 0) { break }
-        if (& $isPastDeadline $adaptiveTimeoutMs) { break }
+        if (-not (Test-ShouldExtendWindow -Method $tentative.Method -AcceptedCount $tentative.AcceptedCount -MinEdgeCount $MinEdgeCount)) { $stopReason = 'enough-edges-or-non-edge-method'; break }
+        if ($ExtendWindowMs -le 0) { $stopReason = 'extension-disabled'; break }
+        if (& $isPastDeadline $adaptiveTimeoutMs) { $stopReason = 'deadline-before-extension'; break }
 
         $extendCount = [int][Math]::Ceiling($ExtendWindowMs / ($rttMedian + $IntervalMs))
         $extendTarget = $samples.Count + $extendCount
         for ($i = $samples.Count; $i -lt $extendTarget; $i++) {
-            if (& $isPastDeadline $adaptiveTimeoutMs) { break }
+            if (& $isPastDeadline $adaptiveTimeoutMs) { $stopReason = 'deadline-during-extension'; break }
             try {
+                $attemptedProbeCount++
                 $s = Invoke-DateProbe -Url $Url -TimeoutMs $adaptiveTimeoutMs -ProbeMode $probeMode -AllowFallback
                 if ($s.ProbeMode -eq 'range-fallback') {
                     $probeMode = 'range'
                     if ($probeHost) { $script:ProbeModeByHost[$probeHost] = 'range' }
                 }
                 [void]$samples.Add($s)
-            } catch { }
+                $newTimeoutMs = Get-AdaptiveTimeoutMs -RttMs @($samples | ForEach-Object { [double]$_.RttMs }) -DefaultTimeoutMs $DefaultTimeoutMs
+                if ($newTimeoutMs -lt $adaptiveTimeoutMs) { $adaptiveTimeoutMs = $newTimeoutMs }
+            } catch { $failedProbeCount++ }
             if ($i -lt $extendTarget - 1) { Start-Sleep -Milliseconds $IntervalMs }
         }
         $tentative = Reduce-Samples -Samples $samples
     }
-    return Add-MeasurementRuntimeInfo -Result $tentative -DefaultTimeoutMs $DefaultTimeoutMs -AdaptiveTimeoutMs $adaptiveTimeoutMs -ProbeMode $probeMode
+    if ($stopReason -eq 'completed' -and $tentative.AcceptedCount -lt $MinEdgeCount) {
+        $stopReason = 'max-extensions'
+    }
+    return Add-MeasurementRuntimeInfo -Result $tentative -DefaultTimeoutMs $DefaultTimeoutMs -AdaptiveTimeoutMs $adaptiveTimeoutMs -ProbeMode $probeMode -AttemptedProbeCount $attemptedProbeCount -FailedProbeCount $failedProbeCount -WallElapsedMs $deadlineSw.Elapsed.TotalMilliseconds -StopReason $stopReason
 }

@@ -155,7 +155,8 @@
 
     <h3>3.4 적응형 Timeout</h3>
     <p>한 샘플당 timeout도 RTT에 맞춰 줄인다. 옛날 코드는 5초 고정이라 hung 한 번에 측정의 반이 날아갔다.</p>
-    <div class="formula">timeoutMs = max(4 × RTT, RTT + 300ms, 500ms), cap 3000ms</div>
+    <div class="formula">timeoutMs = max(4 × basisRTT, basisRTT + 300ms, 500ms), cap 3000ms</div>
+    <p><code>basisRTT</code>는 RTT median만 쓰지 않고 하위 RTT와 median 절반 중 큰 값을 쓴다. 초기 RTT spike가 timeout을 2~3초로 고정하지 못하게 하고, 샘플이 쌓여 더 낮은 timeout이 계산되면 이후 요청부터 낮춘다.</p>
     <p>HTTP Date probe는 ms 단위 timeout을 써서 정수 초 하한을 줄인다.</p>
   </div>
 

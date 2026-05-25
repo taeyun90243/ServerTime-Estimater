@@ -45,6 +45,13 @@ function New-StateStore {
         AcceptedCount = 0         # 채택된(합의된) edge 수
         Method        = ''        # 추정 방법(edge-intersect 등)
         IntersectWidthMs = 0.0    # 교집합 폭
+        MeasurementWallElapsedMs = 0.0
+        AttemptedProbeCount = 0
+        FailedProbeCount = 0
+        StopReason = ''
+        AdaptiveTimeoutMs = 0
+        DefaultTimeoutMs = 0
+        ProbeMode = ''
         LastSamples   = @()       # 상세 보기용 샘플 배열(@() = 빈 배열)
         LastEdges     = @()       # 상세 보기용 edge 배열
         Status        = 'idle'    # idle/queued/measuring/ok/failed/stale
@@ -364,6 +371,13 @@ function Write-StateJson {
         edgeCount      = @($state.LastEdges).Count
         method         = $state.Method
         intersectWidthMs = $state.IntersectWidthMs
+        measurementWallElapsedMs = $state.MeasurementWallElapsedMs
+        attemptedProbeCount = $state.AttemptedProbeCount
+        failedProbeCount = $state.FailedProbeCount
+        stopReason = $state.StopReason
+        adaptiveTimeoutMs = $state.AdaptiveTimeoutMs
+        defaultTimeoutMs = $state.DefaultTimeoutMs
+        probeMode = $state.ProbeMode
         status         = $state.Status
         pcSendTimeAtMs = $pcSendTimeAtMs
         ntpInfo        = $state.NtpInfo
@@ -387,6 +401,13 @@ function Write-SamplesJson {
         sampleCount   = $state.SampleCount
         acceptedCount = $state.AcceptedCount
         intersectWidthMs = $state.IntersectWidthMs
+        measurementWallElapsedMs = $state.MeasurementWallElapsedMs
+        attemptedProbeCount = $state.AttemptedProbeCount
+        failedProbeCount = $state.FailedProbeCount
+        stopReason = $state.StopReason
+        adaptiveTimeoutMs = $state.AdaptiveTimeoutMs
+        defaultTimeoutMs = $state.DefaultTimeoutMs
+        probeMode = $state.ProbeMode
         samples       = @($state.LastSamples)
         edges         = @($state.LastEdges)
     }

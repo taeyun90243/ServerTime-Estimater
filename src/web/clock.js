@@ -290,6 +290,20 @@
     return `edge수 부족. 정확도 낮음 (edge ${edgeCount}개)`;
   }
 
+  function stopReasonLabel(reason) {
+    const labels = {
+      completed: '완료',
+      'enough-edges-or-non-edge-method': 'edge 충분',
+      'max-extensions': '최대 연장',
+      'deadline-before-rtt-probe': '시간예산(RTT)',
+      'deadline-before-main-sample': '시간예산(본문)',
+      'deadline-before-extension': '시간예산(연장 전)',
+      'deadline-during-extension': '시간예산(연장 중)',
+      'extension-disabled': '연장 꺼짐'
+    };
+    return labels[reason] || reason;
+  }
+
   function nowEstimateMs() {
     if (baseServerMs == null) return null;
     return baseServerMs + (performance.now() - basePerfMs);
@@ -388,6 +402,12 @@
       ? '  측정경로: nol.interpark.com/ticket'
       : '';
     const warningNote = lowEdgeWarning ? `  경고: ${lowEdgeWarningText(state)}` : '';
+    const failureNote = state.failedProbeCount > 0
+      ? `  실패 ${state.failedProbeCount}/${state.attemptedProbeCount || sampleCount}`
+      : '';
+    const timeoutNote = state.adaptiveTimeoutMs
+      ? `  timeout ${Math.round(state.adaptiveTimeoutMs)}ms`
+      : '';
     // 교집합 계열의 ±는 "일치 폭"(feasible 영역 반폭)이지 정확도 보장이 아니다.
     // RTT 비대칭 같은 공통 편향은 이 폭에 안 잡힘 → '일치폭'으로 명시.
     const isIntersect = (state.method || '').indexOf('edge-intersect') === 0;
@@ -395,7 +415,7 @@
       ? `일치폭 ±${Math.round(state.ci95Ms || 0)}ms(비대칭 미반영)`
       : `±${Math.round(state.ci95Ms || 0)}ms`;
     document.getElementById('stats').textContent =
-      `측정: ${ago}초 전  RTT ${Math.round(state.rttMedianMs || 0)}ms  ${spreadLabel}  샘플 ${sampleCount}개  방법: ${label}  안전마진 -${Math.round(safetyMs)}ms${measurementNote}${warningNote}`;
+      `측정: ${ago}초 전  RTT ${Math.round(state.rttMedianMs || 0)}ms  ${spreadLabel}  샘플 ${sampleCount}개  방법: ${label}  안전마진 -${Math.round(safetyMs)}ms${failureNote}${timeoutNote}${measurementNote}${warningNote}`;
 
     const ntp = document.getElementById('ntp');
     if (state.ntpInfo) {
@@ -600,6 +620,9 @@
 
     // 요약
     const elapsedTotal = (totalMs / 1000).toFixed(2);
+    const wallElapsedTotal = data.measurementWallElapsedMs
+      ? (data.measurementWallElapsedMs / 1000).toFixed(2)
+      : '';
     let label = methodLabel(data.method, edges.length, data.acceptedCount);
     if (state && state.lastMeasureMode === 'fast') label = '⚡ 빠른 측정 · ' + label + ' (정확도 낮음)';
     const measurementNote = data.measurementNote === 'interpark-final-ticket-page'
@@ -611,11 +634,23 @@
     const widthPart = (typeof data.intersectWidthMs === 'number' && data.intersectWidthMs > 0)
       ? ` | 교집합 폭 ${Math.round(data.intersectWidthMs)}ms`
       : '';
+    const wallPart = wallElapsedTotal
+      ? ` | 실제 경과 ${wallElapsedTotal}초`
+      : '';
+    const failurePart = data.failedProbeCount > 0
+      ? ` | 실패 ${data.failedProbeCount}/${data.attemptedProbeCount || samples.length}`
+      : '';
+    const timeoutPart = data.adaptiveTimeoutMs
+      ? ` | timeout ${Math.round(data.adaptiveTimeoutMs)}ms`
+      : '';
+    const stopPart = data.stopReason
+      ? ` | 종료 ${stopReasonLabel(data.stopReason)}`
+      : '';
     detailsSummary.innerHTML =
       `방법: <strong>${label}</strong> | ` +
       `샘플 <strong>${samples.length}</strong>개 | ` +
       `edge <strong>${edges.length}</strong>개 | ` +
-      `총 측정 ${elapsedTotal}초 | ` +
+      `성공 범위 ${elapsedTotal}초${wallPart}${failurePart}${timeoutPart}${stopPart} | ` +
       `RTT median ${Math.round(rttMedian)}ms | ` +
       `±${Math.round(data.ci95Ms || 0)}ms${widthPart}${measurementNote}${warningNote}`;
   }

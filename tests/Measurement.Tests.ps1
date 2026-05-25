@@ -262,6 +262,16 @@ Describe 'Get-RttThreshold' {
     }
 }
 
+Describe 'Get-AdaptiveTimeoutMs' {
+    It 'reduces the impact of initial RTT spikes' {
+        Get-AdaptiveTimeoutMs -RttMs @(240, 710, 900) -DefaultTimeoutMs 3000 | Should Be 1420
+    }
+
+    It 'keeps a sane lower bound for fast servers' {
+        Get-AdaptiveTimeoutMs -RttMs @(20, 30, 35) -DefaultTimeoutMs 3000 | Should Be 500
+    }
+}
+
 Describe 'Test-ShouldExtendWindow' {
     It 'extends when edge-based and below MinEdgeCount' {
         Test-ShouldExtendWindow -Method 'edge-intersect' -AcceptedCount 3 -MinEdgeCount 8 | Should Be $true
