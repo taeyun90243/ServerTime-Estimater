@@ -155,8 +155,8 @@
 
     <h3>3.4 적응형 Timeout</h3>
     <p>한 샘플당 timeout도 RTT에 맞춰 줄인다. 옛날 코드는 5초 고정이라 hung 한 번에 측정의 반이 날아갔다.</p>
-    <div class="formula">timeoutMs = max(5 × RTT, RTT + 300ms, 400ms), cap 3000ms</div>
-    <p>HTTP Date probe는 <code>HttpWebRequest</code>의 ms 단위 timeout을 직접 써서 정수 초 하한을 피한다.</p>
+    <div class="formula">timeoutMs = max(4 × RTT, RTT + 300ms, 500ms), cap 3000ms</div>
+    <p>HTTP Date probe는 ms 단위 timeout을 써서 정수 초 하한을 줄인다.</p>
   </div>
 
   <div class="card" id="http-method">
@@ -182,7 +182,7 @@
     </ul>
 
     <p>현재 구현은 HEAD 우선, 실패 시 <code>GET + Range: bytes=0-0</code>로 폴백. 둘 다 <code>Date</code> 헤더는 동일하게 받음.</p>
-    <p>단, HEAD가 실패하고 Range가 성공한 서버는 <code>probeMode=range</code>로 전환한다. 이 판정은 실행 중인 프로세스에서 호스트별로 캐시되며, 이후 샘플과 다음 재측정은 Range 전용으로 시작한다. 그래서 <code>HEAD timeout → Range retry</code>가 매번 반복되어 실패 1회가 timeout 2번으로 늘어나는 상황을 피한다.</p>
+    <p>단, HEAD timeout은 같은 샘플에서 Range를 재시도하지 않고 실패 1회로 끝낸다. 빠른 거부나 Date 없음처럼 HEAD가 부적합하고 Range가 성공한 서버만 <code>probeMode=range</code>로 전환한다. 이 판정은 실행 중인 프로세스에서 호스트별로 캐시되며, 이후 샘플과 다음 재측정은 Range 전용으로 시작한다. 그래서 <code>HEAD timeout → Range retry</code>가 매번 반복되어 실패 1회가 timeout 2번으로 늘어나는 상황과, timeout 많은 서버를 느린 Range 전용으로 오판하는 상황을 피한다.</p>
   </div>
 
   <div class="card" id="edge">

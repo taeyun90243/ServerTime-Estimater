@@ -184,26 +184,28 @@ function Invoke-HeadProbe {
         [Parameter(Mandatory)][string]$Url,
         [int]$TimeoutMs = 3000
     )
+    $ProgressPreference = 'SilentlyContinue'
     $t1 = [System.Diagnostics.Stopwatch]::GetTimestamp()
-    $response = $null
     try {
-        $request = [System.Net.HttpWebRequest]::CreateHttp($Url)
-        $request.Method = 'HEAD'
-        $request.UserAgent = $script:ProbeUserAgent
-        $request.Timeout = $TimeoutMs
-        $request.ReadWriteTimeout = $TimeoutMs
-        $request.AllowAutoRedirect = $true
-        $response = [System.Net.HttpWebResponse]$request.GetResponse()
+        $response = Invoke-WebRequest `
+            -Uri $Url `
+            -Method Head `
+            -TimeoutSec ([int][Math]::Ceiling($TimeoutMs / 1000.0)) `
+            -UseBasicParsing `
+            -UserAgent $script:ProbeUserAgent
         $resp = [PSCustomObject]@{
             Headers = @{
                 Date = $response.Headers['Date']
                 Age  = $response.Headers['Age']
             }
         }
+    } catch [System.Net.WebException] {
+        if ($_.Exception.Status -eq [System.Net.WebExceptionStatus]::Timeout) {
+            throw "HEAD date probe timed out after $TimeoutMs ms"
+        }
+        throw "HEAD date probe failed: $_"
     } catch {
         throw "HEAD date probe failed: $_"
-    } finally {
-        if ($response) { $response.Dispose() }
     }
     $t2 = [System.Diagnostics.Stopwatch]::GetTimestamp()
     $pcAtT2 = Get-PcUtcNow
@@ -238,6 +240,7 @@ function Invoke-DateProbe {
     } catch {
         $headError = "$_"
         if (-not $AllowFallback) { throw $headError }
+        if ($headError -match 'timed out') { throw $headError }
         try {
             $sample = Invoke-RangeProbe -Url $Url -TimeoutMs $TimeoutMs
             $sample.ProbeMode = 'range-fallback'
@@ -745,10 +748,10 @@ function Invoke-AdaptiveMultiSample {
     $estimated = [int][Math]::Ceiling($TargetWindowMs / ($rttMedian + $IntervalMs))
     $count = [Math]::Max($MinCount, [Math]::Min($MaxCount, $estimated))
 
-    # 적응형 timeout: 밀리초 단위로 max(5×RTT, RTT+300ms, 400ms), 기본 상한 3초.
-    # RTT 71ms → 400ms, RTT 200ms → 1000ms, RTT 500ms → 2500ms.
-    $adaptiveTimeoutMs = [int][Math]::Ceiling([Math]::Max((5 * $rttMedian), ($rttMedian + 300)))
-    $adaptiveTimeoutMs = [Math]::Max(400, [Math]::Min($DefaultTimeoutMs, $adaptiveTimeoutMs))
+    # 적응형 timeout: 밀리초 단위로 max(4×RTT, RTT+300ms, 500ms), 기본 상한 3초.
+    # RTT 70ms → 500ms, RTT 200ms → 800ms, RTT 500ms → 2000ms.
+    $adaptiveTimeoutMs = [int][Math]::Ceiling([Math]::Max((4 * $rttMedian), ($rttMedian + 300)))
+    $adaptiveTimeoutMs = [Math]::Max(500, [Math]::Min($DefaultTimeoutMs, $adaptiveTimeoutMs))
 
     for ($i = $samples.Count; $i -lt $count; $i++) {
         if (& $isPastDeadline $adaptiveTimeoutMs) { break }
