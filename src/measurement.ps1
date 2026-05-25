@@ -4,6 +4,7 @@
 $script:ProbeUserAgent = 'ServerTimeProbe/1.0 (personal-use)'
 $script:NaverPassportKey = $null
 $script:NaverBrowserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+$script:ProbeModeByHost = @{}
 
 function Get-NaverPassportKey {
     # 네이버 검색 페이지의 시계 위젯에 박혀 내려오는 passportKey를 추출.
@@ -111,14 +112,14 @@ function Get-OffsetMs {
 function Invoke-RangeGetDateProbe {
     param(
         [Parameter(Mandatory)][string]$Url,
-        [int]$TimeoutSec = 5
+        [int]$TimeoutMs = 3000
     )
 
     $request = [System.Net.HttpWebRequest]::CreateHttp($Url)
     $request.Method = 'GET'
     $request.UserAgent = $script:ProbeUserAgent
-    $request.Timeout = $TimeoutSec * 1000
-    $request.ReadWriteTimeout = $TimeoutSec * 1000
+    $request.Timeout = $TimeoutMs
+    $request.ReadWriteTimeout = $TimeoutMs
     $request.AllowAutoRedirect = $true
     $request.AddRange(0, 0)
 
@@ -136,32 +137,16 @@ function Invoke-RangeGetDateProbe {
     }
 }
 
-function Invoke-HeadProbe {
+function New-DateProbeSample {
     param(
-        [Parameter(Mandatory)][string]$Url,
-        [int]$TimeoutSec = 5
+        [Parameter(Mandatory)]$Headers,
+        [Parameter(Mandatory)][long]$StartTicks,
+        [Parameter(Mandatory)][long]$EndTicks,
+        [Parameter(Mandatory)][DateTime]$PcAtT2,
+        [Parameter(Mandatory)][string]$ProbeMode
     )
-    $ProgressPreference = 'SilentlyContinue'
-    $t1 = [System.Diagnostics.Stopwatch]::GetTimestamp()
-    try {
-        $resp = Invoke-WebRequest `
-            -Uri $Url `
-            -Method Head `
-            -TimeoutSec $TimeoutSec `
-            -UseBasicParsing `
-            -UserAgent $script:ProbeUserAgent
-    } catch {
-        try {
-            $t1 = [System.Diagnostics.Stopwatch]::GetTimestamp()
-            $resp = Invoke-RangeGetDateProbe -Url $Url -TimeoutSec $TimeoutSec
-        } catch {
-            throw "HTTP date probe failed: $_"
-        }
-    }
-    $t2 = [System.Diagnostics.Stopwatch]::GetTimestamp()
-    $pcAtT2 = Get-PcUtcNow
 
-    $dateHdr = $resp.Headers.Date
+    $dateHdr = $Headers.Date
     if (-not $dateHdr) { throw 'Date header missing' }
     # Headers.Date is returned as String[], take the first element
     if ($dateHdr -is [array]) { $dateHdr = $dateHdr[0] }
@@ -170,15 +155,15 @@ function Invoke-HeadProbe {
     # Age 보정은 윈도우 전체를 보고 'Date가 정지(frozen)'로 판정될 때만
     # Reduce-Samples(=Set-AgeCorrectedServerDates)에서 적용한다. 라이브 Date에
     # Age를 더하면 정수 초만큼 미래로 과보정되기 때문(ticket.interpark.com 회귀).
-    $ageHdr = $resp.Headers.Age
+    $ageHdr = $Headers.Age
     if ($ageHdr -is [array]) { $ageHdr = $ageHdr[0] }
     $ageSec = 0
     if ($ageHdr -and ($ageHdr -match '^\s*(\d+)\s*$')) { $ageSec = [int]$Matches[1] }
 
-    $rttMs = Get-StopwatchElapsedMs -StartTicks $t1 -EndTicks $t2
+    $rttMs = Get-StopwatchElapsedMs -StartTicks $StartTicks -EndTicks $EndTicks
     $rawServerDateMs = ConvertTo-DateMs $dateHdr
     $serverDateMs = $rawServerDateMs
-    $pcAtT2Ms = ConvertTo-UnixMs -Utc $pcAtT2
+    $pcAtT2Ms = ConvertTo-UnixMs -Utc $PcAtT2
     $rawOffsetMs = Get-OffsetMs -ServerDateMs $serverDateMs -RttMs $rttMs -PcAtT2Ms $pcAtT2Ms
 
     return [PSCustomObject]@{
@@ -190,11 +175,81 @@ function Invoke-HeadProbe {
         AgeSec           = $ageSec
         PcAtT2Ms         = $pcAtT2Ms
         DateHdr          = $dateHdr
+        ProbeMode        = $ProbeMode
+    }
+}
+
+function Invoke-HeadProbe {
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [int]$TimeoutMs = 3000
+    )
+    $t1 = [System.Diagnostics.Stopwatch]::GetTimestamp()
+    $response = $null
+    try {
+        $request = [System.Net.HttpWebRequest]::CreateHttp($Url)
+        $request.Method = 'HEAD'
+        $request.UserAgent = $script:ProbeUserAgent
+        $request.Timeout = $TimeoutMs
+        $request.ReadWriteTimeout = $TimeoutMs
+        $request.AllowAutoRedirect = $true
+        $response = [System.Net.HttpWebResponse]$request.GetResponse()
+        $resp = [PSCustomObject]@{
+            Headers = @{
+                Date = $response.Headers['Date']
+                Age  = $response.Headers['Age']
+            }
+        }
+    } catch {
+        throw "HEAD date probe failed: $_"
+    } finally {
+        if ($response) { $response.Dispose() }
+    }
+    $t2 = [System.Diagnostics.Stopwatch]::GetTimestamp()
+    $pcAtT2 = Get-PcUtcNow
+    return New-DateProbeSample -Headers $resp.Headers -StartTicks $t1 -EndTicks $t2 -PcAtT2 $pcAtT2 -ProbeMode 'head'
+}
+
+function Invoke-RangeProbe {
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [int]$TimeoutMs = 3000
+    )
+    $t1 = [System.Diagnostics.Stopwatch]::GetTimestamp()
+    $resp = Invoke-RangeGetDateProbe -Url $Url -TimeoutMs $TimeoutMs
+    $t2 = [System.Diagnostics.Stopwatch]::GetTimestamp()
+    $pcAtT2 = Get-PcUtcNow
+    return New-DateProbeSample -Headers $resp.Headers -StartTicks $t1 -EndTicks $t2 -PcAtT2 $pcAtT2 -ProbeMode 'range'
+}
+
+function Invoke-DateProbe {
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [int]$TimeoutMs = 3000,
+        [ValidateSet('head','range')][string]$ProbeMode = 'head',
+        [switch]$AllowFallback
+    )
+    if ($ProbeMode -eq 'range') {
+        return Invoke-RangeProbe -Url $Url -TimeoutMs $TimeoutMs
+    }
+
+    try {
+        return Invoke-HeadProbe -Url $Url -TimeoutMs $TimeoutMs
+    } catch {
+        $headError = "$_"
+        if (-not $AllowFallback) { throw $headError }
+        try {
+            $sample = Invoke-RangeProbe -Url $Url -TimeoutMs $TimeoutMs
+            $sample.ProbeMode = 'range-fallback'
+            return $sample
+        } catch {
+            throw "HTTP date probe failed: HEAD: $headError; RANGE: $_"
+        }
     }
 }
 
 function Invoke-NaverTimeProbe {
-    param([int]$TimeoutSec = 5)
+    param([int]$TimeoutMs = 3000)
     $ProgressPreference = 'SilentlyContinue'
 
     if (-not $script:NaverPassportKey) {
@@ -206,7 +261,7 @@ function Invoke-NaverTimeProbe {
     try {
         $resp = Invoke-WebRequest `
             -Uri $apiUrl `
-            -TimeoutSec $TimeoutSec `
+            -TimeoutSec ([int][Math]::Ceiling($TimeoutMs / 1000.0)) `
             -UseBasicParsing `
             -UserAgent $script:ProbeUserAgent
     } catch {
@@ -351,6 +406,19 @@ function Reduce-PreciseSamples {
     }
 }
 
+function Add-MeasurementRuntimeInfo {
+    param(
+        [Parameter(Mandatory)]$Result,
+        [Parameter(Mandatory)][int]$DefaultTimeoutMs,
+        [Parameter(Mandatory)][int]$AdaptiveTimeoutMs,
+        [string]$ProbeMode = ''
+    )
+    $Result | Add-Member -NotePropertyName DefaultTimeoutMs -NotePropertyValue $DefaultTimeoutMs -Force
+    $Result | Add-Member -NotePropertyName AdaptiveTimeoutMs -NotePropertyValue $AdaptiveTimeoutMs -Force
+    $Result | Add-Member -NotePropertyName ProbeMode -NotePropertyValue $ProbeMode -Force
+    return $Result
+}
+
 function Select-QuantizedOffsetCandidates {
     param([Parameter(Mandatory)]$Samples)
 
@@ -368,7 +436,13 @@ function Get-EdgeDetails {
         [int]$IntervalMs = 50
     )
 
-    $ordered = @($Samples)
+    $indexed = for ($idx = 0; $idx -lt @($Samples).Count; $idx++) {
+        $sample = @($Samples)[$idx]
+        $sample | Add-Member -NotePropertyName OriginalIdx -NotePropertyValue $idx -Force
+        $sample | Add-Member -NotePropertyName ServerEventPcMs -NotePropertyValue ([double]$sample.PcAtT2Ms - ([double]$sample.RttMs / 2.0)) -Force
+        $sample
+    }
+    $ordered = @($indexed | Sort-Object ServerEventPcMs)
     $edges = New-Object System.Collections.ArrayList
 
     # RTT 필터: 양 끝 샘플 중 한쪽이라도 임계값을 넘으면 해당 edge offset의 σ가
@@ -404,8 +478,8 @@ function Get-EdgeDetails {
         # L = prev 서버이벤트 PC시각(작음), R = curr(큼) → Lower = S - R, Upper = S - L.
         # OffsetMs(중점) = (Lower + Upper)/2 로 방법1 추정과 일치.
         [void]$edges.Add([PSCustomObject]@{
-            PrevIdx  = $i - 1
-            CurrIdx  = $i
+            PrevIdx  = [int]$prev.OriginalIdx
+            CurrIdx  = [int]$curr.OriginalIdx
             EdgePcMs = $edgePcMs
             OffsetMs = $edgeOffsetMs
             LowerMs  = [double]$curr.ServerDateMs - $currServerEventPcMs
@@ -624,10 +698,10 @@ function Invoke-AdaptiveMultiSample {
         [int]$MinCount = 10,
         [int]$MaxCount = 60,
         [int]$RttProbeCount = 3,
-        [int]$MinEdgeCount = 8,
+        [int]$MinEdgeCount = 5,
         [int]$ExtendWindowMs = 3000,
         [int]$MaxExtensions = 3,
-        [int]$DefaultTimeoutSec = 5,
+        [int]$DefaultTimeoutMs = 3000,
         [int]$MaxTotalMs = 0,
         # 성공 샘플이 목표 Count의 이 비율 미만이면 throw. 빠른 측정은 낮게 줘서
         # 까다로운(느리고 들쭉날쭉한) 서버에서도 적은 샘플로 거친 결과라도 내게 한다.
@@ -635,6 +709,8 @@ function Invoke-AdaptiveMultiSample {
     )
     $samples = New-Object System.Collections.ArrayList
     $useNaverClockApi = Test-NaverClockUrl -Url $Url
+    $probeHost = try { ([Uri]$Url).Host.ToLowerInvariant() } catch { '' }
+    $probeMode = if ($probeHost -and $script:ProbeModeByHost.ContainsKey($probeHost)) { $script:ProbeModeByHost[$probeHost] } else { 'head' }
     $deadlineSw = [System.Diagnostics.Stopwatch]::StartNew()
     # 데드라인 초과 여부. ReserveMs는 곧 시작할 요청의 최대 비용(=timeout)으로,
     # 그만큼 일찍 멈춰 in-flight 요청까지 포함해 MaxTotalMs를 넘지 않게 한다.
@@ -645,9 +721,17 @@ function Invoke-AdaptiveMultiSample {
 
     # RTT 추정 단계: timeout 알 수 없으니 기본값 사용
     for ($i = 0; $i -lt $RttProbeCount; $i++) {
-        if (& $isPastDeadline ($DefaultTimeoutSec * 1000)) { break }
+        if (& $isPastDeadline $DefaultTimeoutMs) { break }
         try {
-            $s = if ($useNaverClockApi) { Invoke-NaverTimeProbe -TimeoutSec $DefaultTimeoutSec } else { Invoke-HeadProbe -Url $Url -TimeoutSec $DefaultTimeoutSec }
+            $s = if ($useNaverClockApi) {
+                Invoke-NaverTimeProbe -TimeoutMs $DefaultTimeoutMs
+            } else {
+                Invoke-DateProbe -Url $Url -TimeoutMs $DefaultTimeoutMs -ProbeMode $probeMode -AllowFallback
+            }
+            if ($s.ProbeMode -eq 'range-fallback') {
+                $probeMode = 'range'
+                if ($probeHost) { $script:ProbeModeByHost[$probeHost] = 'range' }
+            }
             [void]$samples.Add($s)
         } catch { }
         Start-Sleep -Milliseconds $IntervalMs
@@ -661,15 +745,19 @@ function Invoke-AdaptiveMultiSample {
     $estimated = [int][Math]::Ceiling($TargetWindowMs / ($rttMedian + $IntervalMs))
     $count = [Math]::Max($MinCount, [Math]::Min($MaxCount, $estimated))
 
-    # 적응형 timeout: max(1초, ceil(5×RTT)). RTT 91ms → 1초. RTT 500ms → 3초. RTT 1000ms+ → 5초.
-    # Invoke-WebRequest TimeoutSec는 정수 초만 지원해서 ms 단위로는 못 내려감.
-    $adaptiveTimeoutSec = [int][Math]::Max(1, [Math]::Ceiling(5 * $rttMedian / 1000))
-    if ($adaptiveTimeoutSec -gt $DefaultTimeoutSec) { $adaptiveTimeoutSec = $DefaultTimeoutSec }
+    # 적응형 timeout: 밀리초 단위로 max(5×RTT, RTT+300ms, 400ms), 기본 상한 3초.
+    # RTT 71ms → 400ms, RTT 200ms → 1000ms, RTT 500ms → 2500ms.
+    $adaptiveTimeoutMs = [int][Math]::Ceiling([Math]::Max((5 * $rttMedian), ($rttMedian + 300)))
+    $adaptiveTimeoutMs = [Math]::Max(400, [Math]::Min($DefaultTimeoutMs, $adaptiveTimeoutMs))
 
     for ($i = $samples.Count; $i -lt $count; $i++) {
-        if (& $isPastDeadline ($adaptiveTimeoutSec * 1000)) { break }
+        if (& $isPastDeadline $adaptiveTimeoutMs) { break }
         try {
-            $s = if ($useNaverClockApi) { Invoke-NaverTimeProbe -TimeoutSec $adaptiveTimeoutSec } else { Invoke-HeadProbe -Url $Url -TimeoutSec $adaptiveTimeoutSec }
+            $s = if ($useNaverClockApi) { Invoke-NaverTimeProbe -TimeoutMs $adaptiveTimeoutMs } else { Invoke-DateProbe -Url $Url -TimeoutMs $adaptiveTimeoutMs -ProbeMode $probeMode -AllowFallback }
+            if ($s.ProbeMode -eq 'range-fallback') {
+                $probeMode = 'range'
+                if ($probeHost) { $script:ProbeModeByHost[$probeHost] = 'range' }
+            }
             [void]$samples.Add($s)
         } catch { }
         if ($i -lt $count - 1) { Start-Sleep -Milliseconds $IntervalMs }
@@ -681,7 +769,8 @@ function Invoke-AdaptiveMultiSample {
         throw "Too many failed samples: $($samples.Count)/$count"
     }
     if ($useNaverClockApi) {
-        return Reduce-PreciseSamples -Samples $samples -Method 'naver-time-api'
+        $precise = Reduce-PreciseSamples -Samples $samples -Method 'naver-time-api'
+        return Add-MeasurementRuntimeInfo -Result $precise -DefaultTimeoutMs $DefaultTimeoutMs -AdaptiveTimeoutMs $adaptiveTimeoutMs -ProbeMode 'naver-time-api'
     }
 
     # Edge가 부족하면 윈도우 연장. 최대 MaxExtensions회 반복.
@@ -692,19 +781,23 @@ function Invoke-AdaptiveMultiSample {
         # edge 계열이고 edge가 부족할 때만 연장(Test-ShouldExtendWindow).
         if (-not (Test-ShouldExtendWindow -Method $tentative.Method -AcceptedCount $tentative.AcceptedCount -MinEdgeCount $MinEdgeCount)) { break }
         if ($ExtendWindowMs -le 0) { break }
-        if (& $isPastDeadline ($adaptiveTimeoutSec * 1000)) { break }
+        if (& $isPastDeadline $adaptiveTimeoutMs) { break }
 
         $extendCount = [int][Math]::Ceiling($ExtendWindowMs / ($rttMedian + $IntervalMs))
         $extendTarget = $samples.Count + $extendCount
         for ($i = $samples.Count; $i -lt $extendTarget; $i++) {
-            if (& $isPastDeadline ($adaptiveTimeoutSec * 1000)) { break }
+            if (& $isPastDeadline $adaptiveTimeoutMs) { break }
             try {
-                $s = Invoke-HeadProbe -Url $Url -TimeoutSec $adaptiveTimeoutSec
+                $s = Invoke-DateProbe -Url $Url -TimeoutMs $adaptiveTimeoutMs -ProbeMode $probeMode -AllowFallback
+                if ($s.ProbeMode -eq 'range-fallback') {
+                    $probeMode = 'range'
+                    if ($probeHost) { $script:ProbeModeByHost[$probeHost] = 'range' }
+                }
                 [void]$samples.Add($s)
             } catch { }
             if ($i -lt $extendTarget - 1) { Start-Sleep -Milliseconds $IntervalMs }
         }
         $tentative = Reduce-Samples -Samples $samples
     }
-    return $tentative
+    return Add-MeasurementRuntimeInfo -Result $tentative -DefaultTimeoutMs $DefaultTimeoutMs -AdaptiveTimeoutMs $adaptiveTimeoutMs -ProbeMode $probeMode
 }

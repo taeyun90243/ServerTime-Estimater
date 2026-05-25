@@ -82,6 +82,8 @@ if ($url) {
             offsetMs = $result.OffsetMs; sigmaMs = $result.SigmaMs
             rttMedianMs = $result.RttMedianMs
             sampleCount = $result.SampleCount; acceptedCount = $result.AcceptedCount
+            defaultTimeoutMs = $result.DefaultTimeoutMs; adaptiveTimeoutMs = $result.AdaptiveTimeoutMs
+            probeMode = $result.ProbeMode
             method = $result.Method
         }
     } catch {
@@ -151,7 +153,7 @@ $measureSubscription = Register-ObjectEvent `
             try {
                 try { Write-LogEvent @{ ev = 'measure_started'; mode = 'fast'; host = $s.Host; targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl } } catch {}
                 $measurementUrl = if ($s.MeasurementUrl) { $s.MeasurementUrl } else { $s.TargetUrl }
-                # DefaultTimeoutSec=2: RTT probe 단계의 데드라인 reserve를 2초로 낮춰
+                # DefaultTimeoutMs=2000: RTT probe 단계의 데드라인 reserve를 2초로 낮춰
                 # 5초 budget 안에서 probe가 실행되게 한다(기본 5초면 reserve==budget이라
                 # 첫 probe도 못 돌리고 "All initial RTT probes failed"로 죽는다). 적응형
                 # timeout도 ≤2초로 묶여 5초 cap 유지.
@@ -159,7 +161,7 @@ $measureSubscription = Register-ObjectEvent `
                 # 짧은 timeout 탓에 샘플 절반이 실패해도 throw하지 말고 적은 샘플로 거친
                 # 결과(보통 upper-envelope/소수 edge)라도 낸다. 빠른 측정의 취지(정확도
                 # 포기, 일단 빨리 뭐라도)에 맞춤.
-                $r = Invoke-AdaptiveMultiSample -Url $measurementUrl -TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000 -DefaultTimeoutSec 2 -MinSampleFraction 0.15
+                $r = Invoke-AdaptiveMultiSample -Url $measurementUrl -TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000 -DefaultTimeoutMs 2000 -MinSampleFraction 0.15
                 $s.OffsetMs = $r.OffsetMs; $s.RttMedianMs = $r.RttMedianMs; $s.SigmaMs = $r.SigmaMs
                 $s.Ci95Ms = $r.Ci95Ms; $s.SampleCount = $r.SampleCount; $s.AcceptedCount = $r.AcceptedCount
                 $s.Method = $r.Method; $s.IntersectWidthMs = $r.IntersectWidthMs
@@ -171,7 +173,10 @@ $measureSubscription = Register-ObjectEvent `
                     ev = 'measure'; mode = 'fast'; host = $s.Host
                     targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl; measurementNote = $s.MeasurementNote
                     offsetMs = $r.OffsetMs; sigmaMs = $r.SigmaMs; rttMedianMs = $r.RttMedianMs
-                    sampleCount = $r.SampleCount; acceptedCount = $r.AcceptedCount; method = $r.Method
+                    sampleCount = $r.SampleCount; acceptedCount = $r.AcceptedCount
+                    defaultTimeoutMs = $r.DefaultTimeoutMs; adaptiveTimeoutMs = $r.AdaptiveTimeoutMs
+                    probeMode = $r.ProbeMode
+                    method = $r.Method
                 }
             } catch {
                 $s.LastError = "$_"
@@ -274,6 +279,8 @@ $measureSubscription = Register-ObjectEvent `
                     offsetMs = $lastResult.OffsetMs; sigmaMs = $lastResult.SigmaMs
                     rttMedianMs = $lastResult.RttMedianMs
                     sampleCount = $lastResult.SampleCount; acceptedCount = $lastResult.AcceptedCount
+                    defaultTimeoutMs = $lastResult.DefaultTimeoutMs; adaptiveTimeoutMs = $lastResult.AdaptiveTimeoutMs
+                    probeMode = $lastResult.ProbeMode
                     attempt = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     method = $lastResult.Method
                 }
