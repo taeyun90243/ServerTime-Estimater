@@ -184,6 +184,50 @@ Describe 'Sample reduction algorithm' {
         # +6000ms 과보정이 없어야 한다: 진짜 오프셋 근처여야 함.
         [Math]::Abs($r.OffsetMs - $trueOffsetMs) | Should BeLessThan 30
     }
+
+    It 'reports RTT median over only the accepted (filtered) samples, not all probes' {
+        # 사용자 지적: 표시 RTT median이 RTT 필터에서 버려진 outlier probe까지 포함하면
+        # 측정 품질을 과소평가한다. 표시값은 오프셋에 기여한(=필터 통과) 샘플만 반영해야 함.
+        $pcBaseMs = 2000000.0
+        $trueOffsetMs = 350.0
+        # 양호 probe: rtt 20ms, Date가 매초 전환 → edge를 형성(=accepted).
+        $good = 0..49 | ForEach-Object {
+            $pcEventMs = $pcBaseMs + ($_ * 100.0)
+            $serverEventMs = $pcEventMs + $trueOffsetMs
+            $serverDateMs = [Math]::Floor($serverEventMs / 1000.0) * 1000.0
+            $rttMs = 20.0
+            $pcAtT2Ms = $pcEventMs + ($rttMs / 2.0)
+            [PSCustomObject]@{
+                RttMs = $rttMs; ServerDateMs = $serverDateMs; PcAtT2Ms = $pcAtT2Ms
+                RawOffsetMs = ($serverDateMs + $rttMs / 2.0) - $pcAtT2Ms
+                OffsetMs    = ($serverDateMs + $rttMs / 2.0) - $pcAtT2Ms
+            }
+        }
+        # 불량 probe: rtt 5000ms로 다수, Date는 한 값에 고정(전환 없음) → edge 미형성(=rejected).
+        # 다수라 '전체 probe' median은 5000으로 부풀지만, accepted median은 20이어야 한다.
+        $frozenDate = [Math]::Floor(($pcBaseMs + 100000.0 + $trueOffsetMs) / 1000.0) * 1000.0
+        $bad = 0..59 | ForEach-Object {
+            $pcEventMs = $pcBaseMs + 100000.0 + ($_ * 100.0)
+            $rttMs = 5000.0
+            $pcAtT2Ms = $pcEventMs + ($rttMs / 2.0)
+            [PSCustomObject]@{
+                RttMs = $rttMs; ServerDateMs = $frozenDate; PcAtT2Ms = $pcAtT2Ms
+                RawOffsetMs = 0.0; OffsetMs = 0.0
+            }
+        }
+        $r = Reduce-Samples -Samples (@($good) + @($bad))
+        $r.Method | Should Be 'edge-intersect'
+        $r.RttMedianMs | Should Be 20
+    }
+
+    It 'Reduce-PreciseSamples reports RTT median over accepted (low-jitter) samples only' {
+        # naver ms-정밀 경로도 동일 원칙: low-jitter 필터에서 제외된 outlier는 표시 RTT에서 빠진다.
+        # 양호 20개(rtt 20) + outlier 20개(rtt 2000) → 전체 median은 1010이지만 accepted는 20.
+        $good = 1..20 | ForEach-Object { [PSCustomObject]@{ RttMs = 20.0;   OffsetMs = 100.0; RawOffsetMs = 100.0 } }
+        $bad  = 1..20 | ForEach-Object { [PSCustomObject]@{ RttMs = 2000.0; OffsetMs = 100.0; RawOffsetMs = 100.0 } }
+        $r = Reduce-PreciseSamples -Samples (@($good) + @($bad))
+        $r.RttMedianMs | Should Be 20
+    }
 }
 
 Describe 'Get-EdgeDetails per-edge offset bounds' {

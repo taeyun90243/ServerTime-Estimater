@@ -385,6 +385,16 @@ function Select-LowJitterSamples {
     }
 }
 
+function Get-AcceptedRttMedianMs {
+    # 표시용 RTT median. 오프셋 추정에 실제 기여한(=RTT/gap 필터를 통과한) 샘플만
+    # 반영한다. 필터에서 버려진 outlier probe까지 섞으면 표시 RTT가 부풀어 측정
+    # 품질을 과소평가하게 된다(전체 probe median은 RTT 임계값 산정용으로만 쓴다).
+    param($Samples)
+    $rtts = @($Samples | ForEach-Object { [double]$_.RttMs })
+    if ($rtts.Count -eq 0) { return 0.0 }
+    return Get-Median -Values $rtts
+}
+
 function Reduce-PreciseSamples {
     param(
         [Parameter(Mandatory)]$Samples,
@@ -400,7 +410,7 @@ function Reduce-PreciseSamples {
         OffsetMs       = $median
         SigmaMs        = $sigma
         Ci95Ms         = $ci95
-        RttMedianMs    = $filtered.RttMedianMs
+        RttMedianMs    = (Get-AcceptedRttMedianMs -Samples $filtered.Samples)
         SampleCount    = $Samples.Count
         AcceptedCount  = $offsets.Count
         Method         = $Method
@@ -461,13 +471,13 @@ function Get-AdaptiveTimeoutMs {
 }
 
 function Select-QuantizedOffsetCandidates {
+    # 상위 RawOffsetMs(upper-envelope) 샘플을 골라 반환. 오프셋과 RTT median 모두
+    # 같은 accepted 집합에서 나오도록 offset 값이 아니라 샘플 객체를 돌려준다.
     param([Parameter(Mandatory)]$Samples)
 
-    $filtered = Select-LowJitterSamples -Samples $Samples -MinCount 5
-    $rawOffsets = $filtered.Samples | ForEach-Object { [double]$_.RawOffsetMs }
-
-    $candidateCount = [Math]::Max(3, [Math]::Floor($rawOffsets.Count * 0.08))
-    return $rawOffsets | Sort-Object -Descending | Select-Object -First $candidateCount
+    $filtered = @((Select-LowJitterSamples -Samples $Samples -MinCount 5).Samples)
+    $candidateCount = [Math]::Max(3, [Math]::Floor($filtered.Count * 0.08))
+    return @($filtered | Sort-Object -Property RawOffsetMs -Descending | Select-Object -First $candidateCount)
 }
 
 function Get-EdgeDetails {
@@ -671,17 +681,17 @@ function Reduce-Samples {
     # Prefer real Date-header edge detection: when Date jumps N -> N+1, the
     # server second boundary lies between those two server-event estimates.
     $edgeDetails = Get-EdgeDetails -Samples $Samples
-    $rttMedian = Get-Median -Values ($Samples | ForEach-Object { [double]$_.RttMs })
 
     if ($edgeDetails.Count -eq 0) {
         # Fallback for pathological/cached Date behavior where no transition is
         # visible in the sample window.
-        $candidates = Select-QuantizedOffsetCandidates -Samples $Samples
+        $candidateSamples = Select-QuantizedOffsetCandidates -Samples $Samples
+        $candidates = @($candidateSamples | ForEach-Object { [double]$_.RawOffsetMs })
         return [PSCustomObject]@{
             OffsetMs       = (Get-Median -Values $candidates)
             SigmaMs        = (Get-StdDev -Values $candidates)
             Ci95Ms         = (Get-Ci95Ms -Values $candidates)
-            RttMedianMs    = $rttMedian
+            RttMedianMs    = (Get-AcceptedRttMedianMs -Samples $candidateSamples)
             SampleCount    = $Samples.Count
             AcceptedCount  = $candidates.Count
             Method         = 'upper-envelope'
@@ -694,6 +704,10 @@ function Reduce-Samples {
     # 1초 격자 제약을 활용한 교집합 추정(+모순 시 median 폴백).
     $hybrid = Get-HybridOffsetEstimate -Edges $edgeDetails
     $midpoints = @($edgeDetails | ForEach-Object { [double]$_.OffsetMs })
+    # 표시용 RTT median: edge를 형성한(=RTT/gap 필터 통과) 샘플만 반영.
+    $samplesArr = @($Samples)
+    $acceptedIdx = @($edgeDetails | ForEach-Object { $_.PrevIdx; $_.CurrIdx } | Sort-Object -Unique)
+    $rttMedian = Get-AcceptedRttMedianMs -Samples @($acceptedIdx | ForEach-Object { $samplesArr[$_] })
     $sigma = Get-StdDev -Values $midpoints
     # 교집합 계열은 feasible 영역의 반폭이 θ의 hard bound. median 폴백은 통계적 CI.
     $ci95 = if ($hybrid.Method -eq 'edge-median') {

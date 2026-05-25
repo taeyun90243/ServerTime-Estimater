@@ -1,5 +1,25 @@
 # 서버시간 측정 서비스 (Server Time Estimator)
 
+## 표시 RTT median을 accepted 샘플만 반영하도록 수정 (2026-05-25, Claude)
+
+사용자 지적: "rtt median이 전체 RTT의 median이냐? 의심된다." 확인 결과 **표시되는 `RttMedianMs`가 RTT/gap 필터에서 버려진 outlier probe까지 포함한 전체 probe의 median**이었다 → 측정 품질을 과소평가(표시 RTT가 부풀음). offset 추정에 실제 기여한 샘플의 RTT보다 높게 나옴.
+
+### 수정 (`measurement.ps1`)
+
+- **`Get-AcceptedRttMedianMs` 신설**: 주어진 샘플 집합의 full-RTT(t2−t1) median. *표시용* RTT는 이 함수로 accepted 집합에서만 계산.
+- **edge 경로**(주 경로): `RttMedianMs`를 edge를 형성한 샘플(=`Get-EdgeDetails`의 RTT임계값+gap 필터 통과, `PrevIdx`/`CurrIdx` 참조)만의 median으로 변경. 기존의 전체 probe median 계산 줄 제거.
+- **upper-envelope 폴백**: `Select-QuantizedOffsetCandidates`가 offset 값이 아니라 **선택된 샘플 객체**를 반환하도록 리팩터 → offset median과 RTT median이 같은 accepted 집합에서 나옴.
+- **precise(naver) 경로**(`Reduce-PreciseSamples`): `$filtered.RttMedianMs`(전체) 대신 `$filtered.Samples`(low-jitter)의 median.
+- **유지**: `Select-LowJitterSamples`의 내부 `RttMedianMs`는 여전히 전체 샘플 median — 이건 RTT 임계값(`Get-RttThreshold`) *산정용*이라 올바름. 표시값만 바뀜.
+
+### 검증
+
+회귀 2건 추가(RED 확인 후 GREEN): edge 경로(양호 50@20ms + frozen-Date outlier 60@5000ms → 전체 median 5000인데 표시 20), precise 경로(20@20ms + 20@2000ms → 전체 1010인데 표시 20). 전체 **44 passed**(기존 42+2). `release/ServerTimeTools.zip` 내 `src/measurement.ps1` 동기화.
+
+### 주의
+
+`clock.js`/`http-server.ps1`은 `rttMedianMs`를 그대로 통과시키므로 코드 변경 없음. "RTT median" 라벨의 의미가 "측정을 주도한 데이터의 RTT"로 더 정직해짐(필터된 probe로 부풀지 않음).
+
 ## 측정시간 단축 회귀 진단 + MinEdgeCount 복원 (2026-05-25, Claude)
 
 사용자 보고: "측정시간 줄이려 코드를 많이 고쳤는데 timeout이 더 늘고 edge 검출이 줄었다." 디버깅 결과 **코드 변경이 원인**(서버 탓 아님)으로 확정.
