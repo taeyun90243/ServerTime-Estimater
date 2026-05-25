@@ -6,6 +6,7 @@
   // 마진도 max(고정 30ms, RTT×0.3)로 적응시킨다. RTT 90ms→30, 200ms→60, 400ms→120.
   const SAFETY_FLOOR_MS = 30;
   const SAFETY_RTT_FRACTION = 0.3;
+  const LOW_EDGE_WARNING_THRESHOLD = 5;
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
   const ticksGroup = document.getElementById('ticks');
@@ -45,7 +46,7 @@
   const remeasureButton = document.getElementById('remeasure-button');
   const fastMeasureButton = document.getElementById('fast-measure-button');
   const durationHint = document.getElementById('duration-hint');
-  const CAP_HINT = '측정 최대 20초 · 재측정 최대 15초 · 빠른 측정 최대 5초';
+  const CAP_HINT = '측정 최대 15초 · 재측정 최대 12초 · 빠른 측정 최대 5초';
 
   function setStatusText(text, warn, prominent) {
     const st = document.getElementById('status');
@@ -87,7 +88,7 @@
     const button = targetForm.querySelector('button');
     button.disabled = true;
     remeasureButton.disabled = true;
-    setDurationHint('초기 측정: 기본 구간 약 6초, 최대 20초');
+    setDurationHint('초기 측정: 기본 구간 약 6초, 최대 15초');
     setStatusText('측정 요청 중...', false, true);
     try {
       const res = await fetch('/api/target', {
@@ -102,7 +103,7 @@
       targetInput.value = activeTargetUrl;
       resetClockBase();
       localReloadRemeasure = false;
-      setStatusText('초기 측정 중... (20초 이내)', false, true);
+      setStatusText('초기 측정 중... (15초 이내)', false, true);
       await fetchState();
     } catch (e) {
       setStatusText(e.message || 'URL 설정 실패', true, true);
@@ -278,6 +279,31 @@
     }
   }
 
+  function hasLowEdgeWarning(data) {
+    if (!data || !data.lastMeasureAt) return false;
+    if (data.method === 'naver-time-api') return false;
+    return (data.edgeCount || 0) < LOW_EDGE_WARNING_THRESHOLD;
+  }
+
+  function lowEdgeWarningText(data) {
+    const edgeCount = (data && data.edgeCount) || 0;
+    return `edge수 부족. 정확도 낮음 (edge ${edgeCount}개)`;
+  }
+
+  function stopReasonLabel(reason) {
+    const labels = {
+      completed: '완료',
+      'enough-edges-or-non-edge-method': 'edge 충분',
+      'max-extensions': '최대 연장',
+      'deadline-before-rtt-probe': '시간예산(RTT)',
+      'deadline-before-main-sample': '시간예산(본문)',
+      'deadline-before-extension': '시간예산(연장 전)',
+      'deadline-during-extension': '시간예산(연장 중)',
+      'extension-disabled': '연장 꺼짐'
+    };
+    return labels[reason] || reason;
+  }
+
   function nowEstimateMs() {
     if (baseServerMs == null) return null;
     return baseServerMs + (performance.now() - basePerfMs);
@@ -300,7 +326,7 @@
 
   function activeMeasureLabel() {
     if (localFastMeasure) return '빠른 측정 중... (최대 5초)';
-    return isRemeasureUiActive() ? '재측정 중... (15초 이내)' : '초기 측정 중... (20초 이내)';
+    return isRemeasureUiActive() ? '재측정 중... (12초 이내)' : '초기 측정 중... (15초 이내)';
   }
 
   function render() {
@@ -369,10 +395,18 @@
       : '-';
     const sampleCount = state.sampleCount || 0;
     const acceptedCount = state.acceptedCount || 0;
+    const lowEdgeWarning = hasLowEdgeWarning(state);
     let label = methodLabel(state.method, state.edgeCount, acceptedCount);
     if (state.lastMeasureMode === 'fast') label = '⚡ 빠른 측정 · ' + label + ' (정확도 낮음)';
     const measurementNote = state.measurementNote === 'interpark-final-ticket-page'
       ? '  측정경로: nol.interpark.com/ticket'
+      : '';
+    const warningNote = lowEdgeWarning ? `  경고: ${lowEdgeWarningText(state)}` : '';
+    const failureNote = state.failedProbeCount > 0
+      ? `  실패 ${state.failedProbeCount}/${state.attemptedProbeCount || sampleCount}`
+      : '';
+    const timeoutNote = state.adaptiveTimeoutMs
+      ? `  timeout ${Math.round(state.adaptiveTimeoutMs)}ms`
       : '';
     // 교집합 계열의 ±는 "일치 폭"(feasible 영역 반폭)이지 정확도 보장이 아니다.
     // RTT 비대칭 같은 공통 편향은 이 폭에 안 잡힘 → '일치폭'으로 명시.
@@ -381,7 +415,7 @@
       ? `일치폭 ±${Math.round(state.ci95Ms || 0)}ms(비대칭 미반영)`
       : `±${Math.round(state.ci95Ms || 0)}ms`;
     document.getElementById('stats').textContent =
-      `측정: ${ago}초 전  RTT ${Math.round(state.rttMedianMs || 0)}ms  ${spreadLabel}  샘플 ${sampleCount}개  방법: ${label}  안전마진 -${Math.round(safetyMs)}ms${measurementNote}`;
+      `측정: ${ago}초 전  RTT ${Math.round(state.rttMedianMs || 0)}ms  ${spreadLabel}  샘플 ${sampleCount}개  방법: ${label}  안전마진 -${Math.round(safetyMs)}ms${failureNote}${timeoutNote}${measurementNote}${warningNote}`;
 
     const ntp = document.getElementById('ntp');
     if (state.ntpInfo) {
@@ -402,11 +436,11 @@
     } else if (state.status === 'measuring') {
       setStatusText(activeMeasureLabel(), false, isRemeasureUiActive());
     } else if (state.lastRemeasureResult === 'fast') {
-      setStatusText('⚡ 빠른 측정 완료 (정확도 낮음)', false, true);
+      setStatusText(lowEdgeWarning ? `빠른 측정 완료: ${lowEdgeWarningText(state)}` : '⚡ 빠른 측정 완료 (정확도 낮음)', lowEdgeWarning, true);
     } else if (state.lastRemeasureResult === 'failed') {
       setStatusText('측정 실패: 기존값 유지', true, true);
     } else if (state.lastRemeasureResult === 'failed-insufficient-edges') {
-      setStatusText('재측정 실패 (edge 부족): 기존값 유지', true, true);
+      setStatusText(`재측정 실패: ${lowEdgeWarningText(state)}. 기존값 유지`, true, true);
     } else if (state.lastRemeasureResult === 'rejected') {
       // 새 측정이 기존값과 100ms 넘게 벌어져 2회 모두 거부 → 기존값을 그대로 둔다.
       // 이 정도로 벌어졌다면 기존값이 낡았을 수 있으니 '측정' 버튼으로 새로 재기를 권한다.
@@ -421,6 +455,8 @@
       setStatusText('빠른 측정 요청됨...', false, true);
     } else if (hasPendingRemeasure() || localReloadRemeasure) {
       setStatusText(localReloadRemeasure ? '새로고침중... 재측정 확인 중' : '재측정 요청됨...', false, true);
+    } else if (lowEdgeWarning) {
+      setStatusText(lowEdgeWarningText(state), true, true);
     } else {
       setStatusText('', false, false);
     }
@@ -584,21 +620,39 @@
 
     // 요약
     const elapsedTotal = (totalMs / 1000).toFixed(2);
+    const wallElapsedTotal = data.measurementWallElapsedMs
+      ? (data.measurementWallElapsedMs / 1000).toFixed(2)
+      : '';
     let label = methodLabel(data.method, edges.length, data.acceptedCount);
     if (state && state.lastMeasureMode === 'fast') label = '⚡ 빠른 측정 · ' + label + ' (정확도 낮음)';
     const measurementNote = data.measurementNote === 'interpark-final-ticket-page'
       ? ' | 측정경로 nol.interpark.com/ticket'
       : '';
+    const warningNote = (state && hasLowEdgeWarning(state))
+      ? ` | <strong>경고: ${lowEdgeWarningText(state)}</strong>`
+      : '';
     const widthPart = (typeof data.intersectWidthMs === 'number' && data.intersectWidthMs > 0)
       ? ` | 교집합 폭 ${Math.round(data.intersectWidthMs)}ms`
+      : '';
+    const wallPart = wallElapsedTotal
+      ? ` | 실제 경과 ${wallElapsedTotal}초`
+      : '';
+    const failurePart = data.failedProbeCount > 0
+      ? ` | 실패 ${data.failedProbeCount}/${data.attemptedProbeCount || samples.length}`
+      : '';
+    const timeoutPart = data.adaptiveTimeoutMs
+      ? ` | timeout ${Math.round(data.adaptiveTimeoutMs)}ms`
+      : '';
+    const stopPart = data.stopReason
+      ? ` | 종료 ${stopReasonLabel(data.stopReason)}`
       : '';
     detailsSummary.innerHTML =
       `방법: <strong>${label}</strong> | ` +
       `샘플 <strong>${samples.length}</strong>개 | ` +
       `edge <strong>${edges.length}</strong>개 | ` +
-      `총 측정 ${elapsedTotal}초 | ` +
+      `성공 범위 ${elapsedTotal}초${wallPart}${failurePart}${timeoutPart}${stopPart} | ` +
       `RTT median ${Math.round(rttMedian)}ms | ` +
-      `±${Math.round(data.ci95Ms || 0)}ms${widthPart}${measurementNote}`;
+      `±${Math.round(data.ci95Ms || 0)}ms${widthPart}${measurementNote}${warningNote}`;
   }
 
   function showTooltip(evt, s, t0) {

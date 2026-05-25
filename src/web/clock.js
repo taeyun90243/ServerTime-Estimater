@@ -46,7 +46,7 @@
   const remeasureButton = document.getElementById('remeasure-button');
   const fastMeasureButton = document.getElementById('fast-measure-button');
   const durationHint = document.getElementById('duration-hint');
-  const CAP_HINT = '측정 최대 20초 · 재측정 최대 15초 · 빠른 측정 최대 5초';
+  const CAP_HINT = '측정 최대 15초 · 재측정 최대 12초 · 빠른 측정 최대 5초';
 
   function setStatusText(text, warn, prominent) {
     const st = document.getElementById('status');
@@ -88,7 +88,7 @@
     const button = targetForm.querySelector('button');
     button.disabled = true;
     remeasureButton.disabled = true;
-    setDurationHint('초기 측정: 기본 구간 약 6초, 최대 20초');
+    setDurationHint('초기 측정: 기본 구간 약 6초, 최대 15초');
     setStatusText('측정 요청 중...', false, true);
     try {
       const res = await fetch('/api/target', {
@@ -103,7 +103,7 @@
       targetInput.value = activeTargetUrl;
       resetClockBase();
       localReloadRemeasure = false;
-      setStatusText('초기 측정 중... (20초 이내)', false, true);
+      setStatusText('초기 측정 중... (15초 이내)', false, true);
       await fetchState();
     } catch (e) {
       setStatusText(e.message || 'URL 설정 실패', true, true);
@@ -326,7 +326,7 @@
 
   function activeMeasureLabel() {
     if (localFastMeasure) return '빠른 측정 중... (최대 5초)';
-    return isRemeasureUiActive() ? '재측정 중... (15초 이내)' : '초기 측정 중... (20초 이내)';
+    return isRemeasureUiActive() ? '재측정 중... (12초 이내)' : '초기 측정 중... (15초 이내)';
   }
 
   function render() {

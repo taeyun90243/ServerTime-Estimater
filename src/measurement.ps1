@@ -739,7 +739,7 @@ function Invoke-AdaptiveMultiSample {
         [int]$MinCount = 10,
         [int]$MaxCount = 60,
         [int]$RttProbeCount = 3,
-        [int]$MinEdgeCount = 5,
+        [int]$MinEdgeCount = 8,
         [int]$ExtendWindowMs = 3000,
         [int]$MaxExtensions = 3,
         [int]$DefaultTimeoutMs = 3000,

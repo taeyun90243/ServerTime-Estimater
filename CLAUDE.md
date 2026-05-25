@@ -1,5 +1,28 @@
 # 서버시간 측정 서비스 (Server Time Estimator)
 
+## 측정시간 단축 회귀 진단 + MinEdgeCount 복원 (2026-05-25, Claude)
+
+사용자 보고: "측정시간 줄이려 코드를 많이 고쳤는데 timeout이 더 늘고 edge 검출이 줄었다." 디버깅 결과 **코드 변경이 원인**(서버 탓 아님)으로 확정.
+
+### 진단 (로그 + den08 라이브 실측)
+
+같은 호스트(`den08.inames.kr`) RTT median은 5/24·5/25 모두 60~100ms로 동일한데 edge 분포만 하락: **5/24(구 코드) 최빈 9 → 5/25(신 코드) 최빈 5.** RTT 동일·결과 변화 = 코드 원인.
+
+- **edge 감소의 진범 = `MinEdgeCount` 기본값 8→5.** 정상 초기측정(`probe.ps1`)·재측정 모두 이 기본값을 씀. 연장 루프가 5에서 멈춰 5/25 분포가 정확히 5에 쌓임. (빠른 측정은 `-MinEdgeCount 1` 명시라 무관.)
+- **`MinEdgeCount`는 시간 손잡이가 아님.** 측정 최소시간은 `TargetWindowMs`(6초 base), 상한은 `MaxTotalMs`. `MinEdgeCount`는 base 창 *이후* 연장 구간만 게이트. 그래서 낮춰도 시간은 그대로(나쁜 구간은 예산 천장이 지배)고 edge만 깎임 — 사용자가 본 "어이없는" 현상의 정체.
+- **timeout 500ms floor는 죄 거의 없음(실측 확정).** den08 느린 probe는 bimodal: p75=306ms·p90=356ms로 대부분 500ms 내 성공, 진짜 느린 건 곧장 >1000ms. **500~1000ms 회복가능 대역은 2~4%뿐** → floor를 1000으로 올려도 살릴 게 거의 없고 실패 대기만 2배. "timeout 많음"은 den08이 bursty/degraded한 서버 상태 탓.
+
+### 수정
+
+- `measurement.ps1`: `Invoke-AdaptiveMultiSample` 기본 `MinEdgeCount` 5**→8 복원**(edge 풍부도 회복). 적응형 timeout·`DefaultTimeoutMs(3000)`은 실측상 무죄라 유지.
+- `probe.ps1`: 사용자 요청대로 **예산 천장 인하** — 초기측정 20→**15초**(`InitialMeasureBudgetMs`), 재측정 15→**12초**(`RemeasureBudgetMs`). 빠른 서버는 어차피 일찍 끝나 영향 0, den08 나쁜 구간만 "빨리 포기"로 단축.
+- `web/clock.js`: duration-hint·상태문구 `20초→15초`, `15초→12초`.
+- 테스트 42 passed. release `ServerTimeTools/src` 동기화(http-server.ps1 진단필드 drift 포함) + zip 재생성.
+
+### 트레이드오프 (의도된 것)
+
+예산을 줄였으므로 **den08 나쁜 구간에선 8 edge에 못 미친 채 천장에서 중단**(`deadline-before-extension`)됨 → 그 구간 재측정은 `fail-insufficient`(기존 offset 유지)가 다소 늘 수 있음. 단 좋은 구간 실측은 7 edge/14.5초로 목표 근접. 시간↔정확도 맞교환이며 사용자 선택. 아래 "재측정 cap 10→15초" 절의 15초 상향 결정은 이 절로 **부분 정정**(12초로 재인하).
+
 ## 빠른 측정 기능 + 재측정 cap 10→15초 (2026-05-25, Claude)
 
 ### 재측정 cap 상향 (10→15초)

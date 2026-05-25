@@ -58,8 +58,8 @@ if ($url) {
         Write-Host "측정 경로: $($state.MeasurementUrl)" -ForegroundColor DarkGray
     }
     try {
-        # 실제 측정. -MaxTotalMs 20000 = 최대 20초 예산. 핵심 알고리즘은 measurement.ps1.
-        $result = Invoke-AdaptiveMultiSample -Url $state.MeasurementUrl -MaxTotalMs 20000
+        # 실제 측정. -MaxTotalMs 15000 = 최대 15초 예산. 핵심 알고리즘은 measurement.ps1.
+        $result = Invoke-AdaptiveMultiSample -Url $state.MeasurementUrl -MaxTotalMs 15000
         # 측정 결과의 각 값을 공유 상태에 복사(웹 UI가 /api/state로 이 값들을 읽어감).
         $state.OffsetMs      = $result.OffsetMs
         $state.RttMedianMs   = $result.RttMedianMs
@@ -69,6 +69,7 @@ if ($url) {
         $state.AcceptedCount = $result.AcceptedCount
         $state.Method        = $result.Method
         $state.IntersectWidthMs = $result.IntersectWidthMs
+        Set-MeasurementRuntimeState -State $state -Result $result
         $state.LastSamples   = $result.Samples
         $state.LastEdges     = $result.Edges
         $state.LastMeasureAt = Get-PcUtcNow
@@ -82,6 +83,10 @@ if ($url) {
             offsetMs = $result.OffsetMs; sigmaMs = $result.SigmaMs
             rttMedianMs = $result.RttMedianMs
             sampleCount = $result.SampleCount; acceptedCount = $result.AcceptedCount
+            defaultTimeoutMs = $result.DefaultTimeoutMs; adaptiveTimeoutMs = $result.AdaptiveTimeoutMs
+            probeMode = $result.ProbeMode
+            attemptedProbeCount = $result.AttemptedProbeCount; failedProbeCount = $result.FailedProbeCount
+            wallElapsedMs = $result.WallElapsedMs; stopReason = $result.StopReason
             method = $result.Method
         }
     } catch {
@@ -151,7 +156,7 @@ $measureSubscription = Register-ObjectEvent `
             try {
                 try { Write-LogEvent @{ ev = 'measure_started'; mode = 'fast'; host = $s.Host; targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl } } catch {}
                 $measurementUrl = if ($s.MeasurementUrl) { $s.MeasurementUrl } else { $s.TargetUrl }
-                # DefaultTimeoutSec=2: RTT probe 단계의 데드라인 reserve를 2초로 낮춰
+                # DefaultTimeoutMs=2000: RTT probe 단계의 데드라인 reserve를 2초로 낮춰
                 # 5초 budget 안에서 probe가 실행되게 한다(기본 5초면 reserve==budget이라
                 # 첫 probe도 못 돌리고 "All initial RTT probes failed"로 죽는다). 적응형
                 # timeout도 ≤2초로 묶여 5초 cap 유지.
@@ -159,10 +164,11 @@ $measureSubscription = Register-ObjectEvent `
                 # 짧은 timeout 탓에 샘플 절반이 실패해도 throw하지 말고 적은 샘플로 거친
                 # 결과(보통 upper-envelope/소수 edge)라도 낸다. 빠른 측정의 취지(정확도
                 # 포기, 일단 빨리 뭐라도)에 맞춤.
-                $r = Invoke-AdaptiveMultiSample -Url $measurementUrl -TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000 -DefaultTimeoutSec 2 -MinSampleFraction 0.15
+                $r = Invoke-AdaptiveMultiSample -Url $measurementUrl -TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000 -DefaultTimeoutMs 2000 -MinSampleFraction 0.15
                 $s.OffsetMs = $r.OffsetMs; $s.RttMedianMs = $r.RttMedianMs; $s.SigmaMs = $r.SigmaMs
                 $s.Ci95Ms = $r.Ci95Ms; $s.SampleCount = $r.SampleCount; $s.AcceptedCount = $r.AcceptedCount
                 $s.Method = $r.Method; $s.IntersectWidthMs = $r.IntersectWidthMs
+                Set-MeasurementRuntimeState -State $s -Result $r
                 $s.LastSamples = $r.Samples; $s.LastEdges = $r.Edges
                 $s.LastMeasureAt = Get-PcUtcNow; $s.LastMeasureMode = 'fast'
                 $s.LastRemeasureResult = 'fast'; $s.LastError = ''; $s.Status = 'ok'
@@ -171,7 +177,12 @@ $measureSubscription = Register-ObjectEvent `
                     ev = 'measure'; mode = 'fast'; host = $s.Host
                     targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl; measurementNote = $s.MeasurementNote
                     offsetMs = $r.OffsetMs; sigmaMs = $r.SigmaMs; rttMedianMs = $r.RttMedianMs
-                    sampleCount = $r.SampleCount; acceptedCount = $r.AcceptedCount; method = $r.Method
+                    sampleCount = $r.SampleCount; acceptedCount = $r.AcceptedCount
+                    defaultTimeoutMs = $r.DefaultTimeoutMs; adaptiveTimeoutMs = $r.AdaptiveTimeoutMs
+                    probeMode = $r.ProbeMode
+                    attemptedProbeCount = $r.AttemptedProbeCount; failedProbeCount = $r.FailedProbeCount
+                    wallElapsedMs = $r.WallElapsedMs; stopReason = $r.StopReason
+                    method = $r.Method
                 }
             } catch {
                 $s.LastError = "$_"
@@ -202,22 +213,22 @@ $measureSubscription = Register-ObjectEvent `
             $lastResult = $null
             $lastDeltaMs = $null
 
-            # 재측정은 15초 하드캡, 첫 측정/타겟 변경은 20초 하드캡.
+            # 재측정은 12초 하드캡, 첫 측정/타겟 변경은 15초 하드캡.
             # 재측정 캡은 2회 시도 전체에 공유.
-            # 10초였을 때 edge를 천천히 뱉는 호스트(예: den08.inames.kr)가
-            # 초기측정(20초)에선 edge 9개를 뽑으면서 재측정에선 4개에 그쳐
-            # fail-insufficient가 반복됨(데이터는 clean, 시간만 부족). cap은 상한이라
-            # 빠른 호스트는 일찍 accept하고 빠져나가므로 올려도 그쪽 비용은 없음.
-            $InitialMeasureBudgetMs = 20000
-            $RemeasureBudgetMs = 15000
+            # cap은 *상한*이라 빠른 호스트는 일찍 accept하고 빠져나가므로 비용 0.
+            # den08.inames.kr처럼 edge를 천천히 뱉는 느린 호스트는 나쁜 구간에서
+            # 재측정이 5 edge를 못 채워 fail-insufficient(기존 offset 유지)가
+            # 늘 수 있음 — 설계된 안전동작이며 좋은 구간 재측정은 ~9~12초라 12초 안에 듦.
+            $InitialMeasureBudgetMs = 15000
+            $RemeasureBudgetMs = 12000
             $budgetSw = [System.Diagnostics.Stopwatch]::StartNew()
 
             # 최대 2회 시도(delta가 너무 크면 한 번 더 확인하기 위함).
             for ($attempt = 1; $attempt -le 2; $attempt++) {
                 if ($isTargetChange) {
-                    $maxTotalMs = $InitialMeasureBudgetMs   # 첫 측정/타겟 변경: 20초 예산
+                    $maxTotalMs = $InitialMeasureBudgetMs   # 첫 측정/타겟 변경: 15초 예산
                 } else {
-                    # 재측정: 남은 예산 = 15초 - 지금까지 쓴 시간(2회가 예산을 나눠 씀).
+                    # 재측정: 남은 예산 = 12초 - 지금까지 쓴 시간(2회가 예산을 나눠 씀).
                     $remainingMs = $RemeasureBudgetMs - $budgetSw.Elapsed.TotalMilliseconds
                     # 2회차를 시작할 시간이 부족하면 더 시도 안 함(기존값 유지로 귀결).
                     if ($attempt -gt 1 -and $remainingMs -lt 2000) { break }
@@ -252,6 +263,7 @@ $measureSubscription = Register-ObjectEvent `
             if ($lastResult) {
                 $s.LastSamples = $lastResult.Samples
                 $s.LastEdges = $lastResult.Edges
+                Set-MeasurementRuntimeState -State $s -Result $lastResult
             }
 
             if ($accepted) {
@@ -274,6 +286,10 @@ $measureSubscription = Register-ObjectEvent `
                     offsetMs = $lastResult.OffsetMs; sigmaMs = $lastResult.SigmaMs
                     rttMedianMs = $lastResult.RttMedianMs
                     sampleCount = $lastResult.SampleCount; acceptedCount = $lastResult.AcceptedCount
+                    defaultTimeoutMs = $lastResult.DefaultTimeoutMs; adaptiveTimeoutMs = $lastResult.AdaptiveTimeoutMs
+                    probeMode = $lastResult.ProbeMode
+                    attemptedProbeCount = $lastResult.AttemptedProbeCount; failedProbeCount = $lastResult.FailedProbeCount
+                    wallElapsedMs = $lastResult.WallElapsedMs; stopReason = $lastResult.StopReason
                     attempt = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     method = $lastResult.Method
                 }
@@ -287,6 +303,8 @@ $measureSubscription = Register-ObjectEvent `
                     attempt = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
                     thresholdMs = 30
+                    attemptedProbeCount = $lastResult.AttemptedProbeCount; failedProbeCount = $lastResult.FailedProbeCount
+                    wallElapsedMs = $lastResult.WallElapsedMs; stopReason = $lastResult.StopReason
                 }
             } elseif ($insufficientEdges) {
                 # edge 부족: 적은 edge로 갱신하지 않고 기존 offset 유지. 실패만 표시.
@@ -296,6 +314,8 @@ $measureSubscription = Register-ObjectEvent `
                     ev = 'remeasure_failed_insufficient'; host = $s.Host
                     targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl
                     acceptedCount = [int]$lastResult.AcceptedCount; method = $lastResult.Method
+                    attemptedProbeCount = $lastResult.AttemptedProbeCount; failedProbeCount = $lastResult.FailedProbeCount
+                    wallElapsedMs = $lastResult.WallElapsedMs; stopReason = $lastResult.StopReason
                     previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
                 }
             } else {
@@ -307,6 +327,8 @@ $measureSubscription = Register-ObjectEvent `
                     attempts = $s.LastRemeasureAttempts; deltaMs = $lastDeltaMs
                     previousOffsetMs = $previousOffsetMs; newOffsetMs = $lastResult.OffsetMs
                     thresholdMs = 100
+                    attemptedProbeCount = $lastResult.AttemptedProbeCount; failedProbeCount = $lastResult.FailedProbeCount
+                    wallElapsedMs = $lastResult.WallElapsedMs; stopReason = $lastResult.StopReason
                 }
             }
             $s.LastRemeasureFinishedAt = Get-PcUtcNow
