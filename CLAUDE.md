@@ -12,7 +12,8 @@
 
 "20초를 못 기다리는 사용자"용 저정확도 1회성 측정. 설계/계획: `docs/superpowers/specs/2026-05-25-fast-measurement-design.md`, `docs/superpowers/plans/2026-05-25-fast-measurement.md`.
 
-- **알고리즘(신규 함수 0개)**: 기존 `Invoke-AdaptiveMultiSample`을 `-TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000`으로 1회 호출. `MinEdgeCount=1`이라 연장 루프 비활성화(5초 내 종료). edge 1~3개 → ±100~300ms, 0개(frozen) → ±500ms.
+- **알고리즘(신규 함수 0개)**: 기존 `Invoke-AdaptiveMultiSample`을 `-TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000 -DefaultTimeoutSec 2`로 1회 호출. `MinEdgeCount=1`이라 연장 루프 비활성화(5초 내 종료). edge 1~3개 → ±100~300ms, 0개(frozen) → ±500ms.
+  - **`-DefaultTimeoutSec 2` 필수**: RTT probe 단계의 데드라인 reserve가 `DefaultTimeoutSec`(기본 5초)다. fast의 `MaxTotalMs=5000`과 같으면 `elapsed(0)+5000 >= 5000`이 즉시 참이 되어 첫 probe도 못 돌리고 `All initial RTT probes failed`로 죽는다(스모크 테스트로 발견). 2초로 낮추면 5초 budget 안에서 probe 실행 + 적응형 timeout ≤2초로 cap 유지.
 - **게이트 우회**: 재측정 게이트/delta 재시도 안 탐. 1회 결과를 그대로 채택·덮어쓰기(명시적 동작). 첫 측정으로도 사용 가능(LastMeasureAt 불필요).
 - **서버**: state에 `MeasureMode`('normal'|'fast')/`LastMeasureMode` 추가. Elapsed 핸들러 상단에 fast 분기(채택 후 `MeasureMode='normal'` 리셋). 신규 `POST /api/measure-fast`(`Start-FastMeasureFromRequest`). `/api/state`에 `lastMeasureMode` 노출.
 - **UI**: `⚡ 빠른 측정` 버튼. 클릭 시 **최근(5분 이내, 기존 stale 임계값 재사용) 유효 측정이 있으면 `confirm()`로 덮어쓰기 확인**, 오래됨/없음이면 바로 실행. `duration-hint`를 `측정 최대 20초 · 재측정 최대 15초 · 빠른 측정 최대 5초`로 cap 3개 명시(요구사항). 결과 라벨에 `⚡ 빠른 측정 · … (정확도 낮음)` 접두. stale했던 `재측정 중... (10초)` → `(15초)` 수정.
