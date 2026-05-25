@@ -1,4 +1,4 @@
-# measurement.ps1 - 측정 알고리즘 (§4)
+﻿# measurement.ps1 - 측정 알고리즘 (§4)
 . "$PSScriptRoot\anchor.ps1"
 
 $script:ProbeUserAgent = 'ServerTimeProbe/1.0 (personal-use)'
