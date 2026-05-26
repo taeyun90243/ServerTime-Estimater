@@ -85,9 +85,10 @@
   }
 
   async function submitTarget(url) {
-    const button = targetForm.querySelector('button');
+    const button = targetForm.querySelector('button[type="submit"]');
     button.disabled = true;
     remeasureButton.disabled = true;
+    if (fastMeasureButton) fastMeasureButton.disabled = true;
     setDurationHint('초기 측정: 기본 구간 약 6초, 최대 15초');
     setStatusText('측정 요청 중...', false, true);
     try {
@@ -140,18 +141,37 @@
   remeasureButton.addEventListener('click', requestRemeasure);
 
   async function requestFastMeasure() {
-    if (!state || !state.targetUrl || state.status === 'measuring' || state.status === 'queued') return;
-    // 최근(5분 이내) 유효 측정이 있으면 저정확도 결과로 덮어쓰기 전에 확인.
-    const recent = state.lastMeasureAt && state.status !== 'stale';
-    if (recent && !window.confirm('최근 측정값이 있습니다. 빠른 측정(정확도 낮음)으로 덮어쓸까요?')) return;
+    if (state && (state.status === 'measuring' || state.status === 'queued')) return;
+    // 입력창 URL로 첫 측정도 가능(초기 측정 거치지 않고 바로 빠른 측정).
+    const url = (targetInput.value || '').trim();
+    if (!url) {
+      setStatusText('측정할 URL을 입력하세요', true, true);
+      targetInput.focus();
+      return;
+    }
+    // 이미 측정한 같은 대상을 다시 빠른 측정하면 저정확도 결과로 덮어쓰기 전에 확인.
+    // (입력창은 측정 후 정규화된 targetUrl로 채워지므로, 새 URL을 친 경우엔 일치 안 함 → 확인 생략.)
+    const sameTarget = !!(state && state.targetUrl && url === state.targetUrl);
+    const recent = !!(state && state.lastMeasureAt && state.status !== 'stale');
+    if (sameTarget && recent && !window.confirm('최근 측정값이 있습니다. 빠른 측정(정확도 낮음)으로 덮어쓸까요?')) return;
     fastMeasureButton.disabled = true;
     setStatusText('빠른 측정 요청 중...', false, true);
     resetClockBase();
     localFastMeasure = true;
     try {
-      const res = await fetch('/api/measure-fast', { method: 'POST', cache: 'no-store' });
+      const res = await fetch('/api/measure-fast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+        cache: 'no-store'
+      });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || '빠른 측정 요청 실패');
+      if (data.targetUrl) {
+        activeTargetUrl = data.targetUrl;
+        activeMeasurementUrl = data.measurementUrl || activeMeasurementUrl;
+        targetInput.value = data.targetUrl;
+      }
       await fetchState();
     } catch (e) {
       localFastMeasure = false;
@@ -170,10 +190,9 @@
   function updateControls() {
     const isBusy = !!state && (state.status === 'measuring' || state.status === 'queued');
     const hasMeasuredTarget = !!state && !!state.targetUrl && !!state.lastMeasureAt;
-    const hasTarget = !!state && !!state.targetUrl;
     remeasureButton.disabled = isBusy || !hasMeasuredTarget;
-    // 빠른 측정은 첫 측정으로도 쓸 수 있어 targetUrl만 있으면 활성.
-    if (fastMeasureButton) fastMeasureButton.disabled = isBusy || !hasTarget;
+    // 빠른 측정은 입력창 URL로 첫 측정도 할 수 있어 측정 중이 아니면 항상 활성(측정 버튼과 동일).
+    if (fastMeasureButton) fastMeasureButton.disabled = isBusy;
     setDurationHint(CAP_HINT);
   }
 
@@ -436,7 +455,9 @@
     } else if (state.status === 'measuring') {
       setStatusText(activeMeasureLabel(), false, isRemeasureUiActive());
     } else if (state.lastRemeasureResult === 'fast') {
-      setStatusText(lowEdgeWarning ? `빠른 측정 완료: ${lowEdgeWarningText(state)}` : '⚡ 빠른 측정 완료 (정확도 낮음)', lowEdgeWarning, true);
+      setStatusText(`빠른 측정 완료 : edge ${state.edgeCount || 0}개`, false, true);
+    } else if (state.lastRemeasureResult === 'fast-failed') {
+      setStatusText('⚡ 빠른 측정 실패: edge(초 경계) 미검출 — 기존값 유지', true, true);
     } else if (state.lastRemeasureResult === 'failed') {
       setStatusText('측정 실패: 기존값 유지', true, true);
     } else if (state.lastRemeasureResult === 'failed-insufficient-edges') {

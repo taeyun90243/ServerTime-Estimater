@@ -1,5 +1,40 @@
 # 서버시간 측정 서비스 (Server Time Estimator)
 
+## 빠른 측정 MinEdgeCount 1→3 (edge 부족 시 5초 채우기) (2026-05-26, Claude)
+
+사용자 요청: "minEdgeCount 3개로 하자. 2개 이하면 5초 꽉 채우게."
+
+- **`probe.ps1`** fast 분기 호출을 `-MinEdgeCount 1` → **`-MinEdgeCount 3`** 으로 변경(나머지 `TargetWindowMs 2500`/`MaxTotalMs 5000`/`DefaultTimeoutMs 2000`/`MinSampleFraction 0.15`는 유지). 연장 로직(`Test-ShouldExtendWindow` + `MaxTotalMs` 데드라인)이 edge<3이면 5초 데드라인까지 윈도우를 연장 → edge 2개 이하면 5초를 꽉 채워 더 모으고, 충분하면 ~2.5초에 일찍 종료. 5초 하드캡 불변이라 최대 시간은 그대로.
+- **`measurement.ps1`** `MaxExtensions` 주석의 "빠른 측정은 MinEdgeCount=1" 설명을 "MinEdgeCount=3·MaxTotalMs=5000"으로 정정.
+- **문서 동기화**: `docs/프로젝트_기술문서.md` §4.6(파라미터·기대정확도) + 변경이력 1줄, `docs/사용설명서.html`(차이 표·기대동작: edge 0개 실패/edge 부족 시 5초 연장 명시). `release/ServerTimeTools.zip` 내 `src/probe.ps1`·`src/measurement.ps1` 동기화(PowerShell `System.IO.Compression`으로 엔트리 교체, `zip` CLI 없음).
+- 주의: edge 0개(`upper-envelope`)는 여전히 실패 처리(기존 절 유지). MinEdgeCount=3이라도 edge 0개면 연장 대상이 아니라 throw.
+
+## 빠른 측정: 첫 측정으로 바로 사용 + 측정 옆 배치 + edge 0개 실패 (2026-05-26, Claude)
+
+사용자 요청 2건: (1) "처음에 초기측정 말고 바로 빠른 측정도 가능하게, 버튼을 측정 옆에 둬줘." (2) "빠른 측정에서도 edge를 하나도 검출 못하면 실패."
+
+### (1) 첫 측정으로 빠른 측정 + 버튼 이동
+
+- **`index.html`**: `⚡ 빠른 측정` 버튼을 `.measure-actions`(재측정 옆)에서 **`target-form` 안 `측정` 버튼 바로 옆**으로 이동. `disabled` 속성 제거(첫 측정으로 쓸 수 있어 측정 중이 아니면 항상 활성).
+- **`clock.css`**: form 안 fast 버튼은 `.target-form button`의 고정폭 `flex:0 0 72px`에 걸려 라벨이 잘리므로 `.target-form .fast-measure-button { flex:0 0 auto; 흰색 보조 스타일 }` 규칙 추가.
+- **`clock.js`** `requestFastMeasure`: 더 이상 `state.targetUrl` 선존재를 요구하지 않음. **입력창 URL을 읽어** body `{url}`로 POST. 빈 입력은 안내 후 focus. 덮어쓰기 confirm은 *입력 URL이 현재 측정된 targetUrl과 일치하고* 최근 측정이 있을 때만(새 URL이면 생략). 응답의 `targetUrl`로 `activeTargetUrl`/입력창 동기화. `updateControls`: fast 버튼은 `isBusy`만으로 비활성(target 무관). `submitTarget`도 측정 중 fast 버튼 잠금, 제출 버튼 셀렉터를 `button[type="submit"]`로 한정.
+- **`http-server.ps1`** `Start-FastMeasureFromRequest`: `$req` 추가. body에 `url`이 오면 `Normalize-TargetUrl`+`Resolve-MeasurementTarget`로 **초기 측정을 거치지 않고 대상 설정**(같은 대상 재측정이면 기존값 보존, 새 대상이면 상태 초기화) 후 fast 측정. body 없으면 기존 대상 재측정(하위호환). 응답에 `host/targetUrl/measurementUrl/measurementNote` 추가. 핸들러 호출도 `$req` 전달로 수정.
+
+### (2) edge 0개 → 실패
+
+- **`probe.ps1`** fast 분기: `Invoke-AdaptiveMultiSample` 직후 **`$r.Method -eq 'upper-envelope'`(=edge 하나도 못 잡음)이면 throw**. 정수 초 경계가 없어 offset 부정확 → 채택 안 함. **주의: edge 0개여도 `naver-time-api`는 ms 정밀이라 제외**(method 검사라 자동 제외, edge.Count 검사면 naver를 오판). throw는 기존 catch로 빠져 기존 측정 있으면 유지(status=ok, `LastRemeasureResult='fast-failed'`), 없으면 `status='failed'`.
+- **`clock.js`**: `fast-failed` 분기 추가 → "⚡ 빠른 측정 실패: edge(초 경계) 미검출 — 기존값 유지".
+
+### 완료 메시지 단순화
+
+사용자 요청: 빠른 측정 완료 시 상태문구를 **"빠른 측정 완료 : edge #개"** 만 표시. `clock.js`의 `fast` 분기를 `빠른 측정 완료 : edge ${edgeCount}개`로 변경(기존 "(정확도 낮음)"/low-edge 경고문 제거, warn 스타일 해제).
+
+### 검증
+
+- Pester 44 passed, 변경 4개 ps1/측정 파일 파서 에러 0.
+- **라이브 스모크**(google.com): body url로 첫 빠른 측정 → host 설정+`edge-intersect` 2 edge/offset 24.9ms 채택. body 없는 재측정도 정상. (edge 0개 실패 경로는 frozen-Date 호스트가 없어 라이브 미검증 — 단순 조건부 throw가 검증된 catch로 합류.)
+- `release/ServerTimeTools.zip` 내 5개 파일(index.html/clock.css/clock.js/http-server.ps1/probe.ps1) 엔트리 교체·내용 일치 확인.
+
 ## 표시 RTT median을 accepted 샘플만 반영하도록 수정 (2026-05-25, Claude)
 
 사용자 지적: "rtt median이 전체 RTT의 median이냐? 의심된다." 확인 결과 **표시되는 `RttMedianMs`가 RTT/gap 필터에서 버려진 outlier probe까지 포함한 전체 probe의 median**이었다 → 측정 품질을 과소평가(표시 RTT가 부풀음). offset 추정에 실제 기여한 샘플의 RTT보다 높게 나옴.

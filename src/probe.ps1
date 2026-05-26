@@ -164,7 +164,15 @@ $measureSubscription = Register-ObjectEvent `
                 # 짧은 timeout 탓에 샘플 절반이 실패해도 throw하지 말고 적은 샘플로 거친
                 # 결과(보통 upper-envelope/소수 edge)라도 낸다. 빠른 측정의 취지(정확도
                 # 포기, 일단 빨리 뭐라도)에 맞춤.
-                $r = Invoke-AdaptiveMultiSample -Url $measurementUrl -TargetWindowMs 2500 -MinEdgeCount 1 -MaxTotalMs 5000 -DefaultTimeoutMs 2000 -MinSampleFraction 0.15
+                # MinEdgeCount=3: edge 3개를 못 채우면(2개 이하) MaxTotalMs(5초) 데드라인까지
+                # 창을 연장한다 → 좋은 서버는 일찍 끝나고, edge 부족하면 5초를 꽉 채워 더 모은다.
+                $r = Invoke-AdaptiveMultiSample -Url $measurementUrl -TargetWindowMs 2500 -MinEdgeCount 3 -MaxTotalMs 5000 -DefaultTimeoutMs 2000 -MinSampleFraction 0.15
+                # edge를 하나도 못 잡으면(=upper-envelope 폴백) 빠른 측정도 실패 처리한다.
+                # 정수 초 경계가 없어 offset이 부정확하므로 채택하지 않는다.
+                # (naver-time-api는 edge 0개라도 ms 정밀이므로 여기서 제외 — upper-envelope만 실패.)
+                if ($r.Method -eq 'upper-envelope') {
+                    throw '빠른 측정 실패: edge(초 경계)를 검출하지 못했습니다.'
+                }
                 $s.OffsetMs = $r.OffsetMs; $s.RttMedianMs = $r.RttMedianMs; $s.SigmaMs = $r.SigmaMs
                 $s.Ci95Ms = $r.Ci95Ms; $s.SampleCount = $r.SampleCount; $s.AcceptedCount = $r.AcceptedCount
                 $s.Method = $r.Method; $s.IntersectWidthMs = $r.IntersectWidthMs
@@ -186,7 +194,8 @@ $measureSubscription = Register-ObjectEvent `
                 }
             } catch {
                 $s.LastError = "$_"
-                if ($s.LastMeasureAt) { $s.LastRemeasureResult = 'failed'; $s.Status = 'ok' } else { $s.Status = 'failed' }
+                # 빠른 측정 실패: 기존 측정이 있으면 그 값을 유지(status=ok), 없으면 failed.
+                if ($s.LastMeasureAt) { $s.LastRemeasureResult = 'fast-failed'; $s.Status = 'ok' } else { $s.Status = 'failed' }
                 try { Write-LogEvent @{ ev = 'measure_failed'; mode = 'fast'; targetUrl = $s.TargetUrl; measurementUrl = $s.MeasurementUrl; reason = "$_" } } catch {}
             } finally {
                 $s.MeasureMode = 'normal'

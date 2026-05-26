@@ -759,7 +759,7 @@ function Invoke-AdaptiveMultiSample {
         # 'max-extensions'로 조기 종료했다(지터 큰 서버에서 edge 부족인데도 ~9초에 멈춤).
         # 20으로 올려 실질 한계를 MaxTotalMs 데드라인으로 옮긴다. 루프 안 deadline 체크가
         # 종료를 보장하므로 이 값은 사실상 "예산을 다 쓸 때까지"의 안전 상한일 뿐이다.
-        # (빠른 측정은 MinEdgeCount=1이라 edge 1개에서 멈춰 과연장 안 됨.)
+        # (빠른 측정은 MinEdgeCount=3·MaxTotalMs=5000이라 edge 3개 또는 5초 데드라인에서 멈춤.)
         [int]$MaxExtensions = 20,
         [int]$DefaultTimeoutMs = 3000,
         [int]$MaxTotalMs = 0,

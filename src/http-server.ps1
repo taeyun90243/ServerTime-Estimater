@@ -148,7 +148,7 @@ function Handle-Request {
             Write-JsonResponse $resp @{ ok = $false; error = 'Method Not Allowed' }
             return
         }
-        Start-FastMeasureFromRequest $resp $state
+        Start-FastMeasureFromRequest $req $resp $state
     } else {
         $resp.StatusCode = 404
         $bytes = [Text.Encoding]::UTF8.GetBytes('Not Found')
@@ -200,7 +200,47 @@ function Start-RemeasureFromRequest {
 }
 
 function Start-FastMeasureFromRequest {
-    param($resp, $state)
+    param($req, $resp, $state)
+
+    # body에 url이 오면(=측정 옆 빠른 측정 버튼) 초기 측정을 거치지 않고
+    # 바로 대상을 설정한 뒤 빠른 측정한다. url이 없으면 기존 대상을 재측정.
+    $bodyUrl = ''
+    try {
+        if ($req -and $req.HasEntityBody) {
+            $reader = New-Object IO.StreamReader($req.InputStream, $req.ContentEncoding)
+            $body = $reader.ReadToEnd()
+            $payload = if ($body) { $body | ConvertFrom-Json } else { $null }
+            if ($payload -and $payload.url) { $bodyUrl = [string]$payload.url }
+        }
+    } catch { $bodyUrl = '' }
+
+    if ($bodyUrl) {
+        try {
+            $url = Normalize-TargetUrl -Url $bodyUrl
+        } catch {
+            $resp.StatusCode = 400
+            Write-JsonResponse $resp @{ ok = $false; error = "$_" }
+            return
+        }
+        if (Get-Command Resolve-MeasurementTarget -ErrorAction SilentlyContinue) {
+            $mt = Resolve-MeasurementTarget -Url $url
+        } else {
+            $mt = [PSCustomObject]@{ TargetUrl = $url; MeasurementUrl = $url; MeasurementNote = '' }
+        }
+        # 같은 대상의 재측정인지(=기존 측정 보존) 새 대상인지(=상태 초기화) 구분.
+        $isSameMeasuredTarget = $state.TargetUrl -eq $mt.TargetUrl -and $state.LastMeasureAt
+        $state.Host = ([Uri]$mt.TargetUrl).Host
+        $state.TargetUrl = $mt.TargetUrl
+        $state.MeasurementUrl = $mt.MeasurementUrl
+        $state.MeasurementNote = $mt.MeasurementNote
+        if (-not $isSameMeasuredTarget) {
+            $state.LastMeasureAt = $null
+            $state.RttMedianMs = 0.0
+            $state.SigmaMs = 0.0
+            $state.Ci95Ms = 0.0
+            $state.LastError = ''
+        }
+    }
 
     if (-not $state.TargetUrl) {
         $resp.StatusCode = 409
@@ -222,7 +262,8 @@ function Start-FastMeasureFromRequest {
     $state.LastRemeasureResult = ''
     $state.LastRemeasureDeltaMs = $null
     $state.LastRemeasureAttempts = 0
-    if (Get-Command Resolve-MeasurementTarget -ErrorAction SilentlyContinue) {
+    if (-not $bodyUrl -and (Get-Command Resolve-MeasurementTarget -ErrorAction SilentlyContinue)) {
+        # body url이 없을 때만 여기서 대상 재해석(위에서 이미 set한 경우 중복 방지).
         $measurementTarget = Resolve-MeasurementTarget -Url $state.TargetUrl
         $state.TargetUrl = $measurementTarget.TargetUrl
         $state.Host = ([Uri]$measurementTarget.TargetUrl).Host
@@ -236,7 +277,7 @@ function Start-FastMeasureFromRequest {
     $state.Status = 'queued'
     Write-LogEvent @{ ev = 'fast_measure_requested'; source = 'button'; host = $state.Host }
     Restart-MeasureTimer $state.MeasureTimer
-    Write-JsonResponse $resp @{ ok = $true }
+    Write-JsonResponse $resp @{ ok = $true; host = $state.Host; targetUrl = $state.TargetUrl; measurementUrl = $state.MeasurementUrl; measurementNote = $state.MeasurementNote }
 }
 
 function Restart-MeasureTimer {

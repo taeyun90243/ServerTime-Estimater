@@ -146,8 +146,8 @@ https://naver.com/</pre>
       <thead><tr><th></th><th>측정 / 재측정</th><th>빠른 측정</th></tr></thead>
       <tbody>
         <tr><td>최대 시간</td><td>15초 / 12초</td><td><strong>5초</strong></td></tr>
-        <tr><td>정확도(대략)</td><td>±30~80ms</td><td><strong>±100~300ms</strong>(신호 없으면 ±500ms)</td></tr>
-        <tr><td>실패 시 처리</td><td>edge 부족이면 기존값 유지</td><td>결과가 적어도 그대로 반영(덮어쓰기)</td></tr>
+        <tr><td>정확도(대략)</td><td>±30~80ms</td><td><strong>±수십~300ms</strong>(edge 신호 없으면 실패)</td></tr>
+        <tr><td>실패 시 처리</td><td>edge 부족이면 기존값 유지</td><td>edge 0개면 실패(기존값 유지), 1개 이상이면 그대로 반영(덮어쓰기)</td></tr>
       </tbody>
     </table>
 
@@ -156,7 +156,8 @@ https://naver.com/</pre>
       <li>버튼을 누르면 화면이 <code>빠른 측정 중... (최대 5초)</code>으로 바뀝니다.</li>
       <li><strong>최근에 측정한 값(5분 이내)이 있으면</strong> "덮어쓸까요?" 확인창이 먼저 뜹니다. 확인을 눌러야 진행됩니다.</li>
       <li>측정이 오래되었거나 아직 측정 전이면 확인 없이 바로 측정합니다.</li>
-      <li>완료되면 통계줄에 <code>⚡ 빠른 측정 · … (정확도 낮음)</code>으로 표시됩니다.</li>
+      <li>edge(초 경계)를 충분히(3개) 잡으면 더 일찍 끝나고, 2개 이하로 부족하면 최대 5초까지 더 모읍니다.</li>
+      <li>완료되면 상태줄에 <code>빠른 측정 완료 : edge #개</code>, 통계줄에 <code>⚡ 빠른 측정 · … (정확도 낮음)</code>으로 표시됩니다. (edge를 하나도 못 잡으면 실패하고 기존값을 유지합니다.)</li>
     </ol>
 
     <div class="note warn">

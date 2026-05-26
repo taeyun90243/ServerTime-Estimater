@@ -48,6 +48,22 @@ body {
   background: #bbb;
   cursor: default;
 }
+/* 측정 옆 빠른 측정 버튼: 고정폭(72px) 대신 내용 크기로, 보조(흰색) 스타일 유지 */
+.target-form .fast-measure-button {
+  flex: 0 0 auto;
+  height: 38px;
+  background: #fff;
+  color: var(--text);
+  border: 1px solid #ddd;
+}
+.target-form .fast-measure-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.target-form .fast-measure-button:disabled {
+  background: #f6f6f6;
+  color: #aaa;
+}
 
 .measure-actions {
   display: flex;
